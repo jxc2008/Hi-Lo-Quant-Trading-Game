@@ -3,6 +3,7 @@ import { StyleSheet, Text, View, TouchableOpacity, Animated, ScrollView, Platfor
 import { Link, useNavigation } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
 import { useFonts } from 'expo-font';
+import { T } from '../styles/global';
 
 import GameList from './components/GameList';
 import JoinGameModal from './components/JoinGameModal';
@@ -12,6 +13,7 @@ export default function Index() {
   const [showJoinModal, setShowJoinModal] = useState(false);
   const [showCreateModal, setShowCreateModal] = useState(false);
   const fadeAnim = useState(new Animated.Value(0))[0];
+  const slideAnim = useState(new Animated.Value(20))[0];
 
   const navigation = useNavigation();
 
@@ -27,14 +29,21 @@ export default function Index() {
       }
     });
 
-    Animated.timing(fadeAnim, {
-      toValue: 1,
-      duration: 1000,
-      useNativeDriver: true,
-    }).start();
+    Animated.parallel([
+      Animated.timing(fadeAnim, {
+        toValue: 1,
+        duration: 800,
+        useNativeDriver: true,
+      }),
+      Animated.timing(slideAnim, {
+        toValue: 0,
+        duration: 800,
+        useNativeDriver: true,
+      }),
+    ]).start();
 
     return unsubscribe;
-  }, [navigation, fadeAnim]);
+  }, [navigation, fadeAnim, slideAnim]);
 
   if (!fontsLoaded) {
     return null;
@@ -42,47 +51,69 @@ export default function Index() {
 
   return (
     <ScrollView style={styles.container} contentContainerStyle={styles.contentContainer}>
-      <Animated.View style={[styles.content, { opacity: fadeAnim }]}>
-        <View style={styles.titleContainer}>
-          <Text style={styles.titleHiLo}>Hi-Lo</Text>
-          <Text style={styles.titleRest}>Stock Market Game</Text>
+      <Animated.View style={[styles.content, { opacity: fadeAnim, transform: [{ translateY: slideAnim }] }]}>
+
+        {/* Header bar */}
+        <View style={styles.headerBar}>
+          <Text style={styles.headerBarText}>HI-LO TRADING TERMINAL</Text>
+          <View style={styles.statusDot} />
+          <Text style={styles.statusText}>LIVE</Text>
         </View>
 
+        {/* Title block */}
+        <View style={styles.titleContainer}>
+          <Text style={styles.titleHiLo}>Hi-Lo</Text>
+          <Text style={styles.titleSub}>STOCK MARKET GAME</Text>
+          <View style={styles.titleDivider} />
+        </View>
+
+        {/* Intro */}
         <Text style={styles.introduction}>
-          Welcome to the Hi-Lo Stock Market Game! Before you start, make sure to read the{' '}
-          <Text style={styles.linkText} onPress={() => navigation.navigate('rules' as never)}>rules</Text>.
-          To learn about the creators, check out the{' '}
+          Read the{' '}
+          <Text style={styles.linkText} onPress={() => navigation.navigate('rules' as never)}>rules</Text>
+          {' '}before playing. Learn about the creators on the{' '}
           <Text style={styles.linkText} onPress={() => navigation.navigate('about' as never)}>about</Text> page.
         </Text>
 
-        <View style={styles.gameList}>
-          <GameList />
+        {/* Game list panel */}
+        <View style={styles.panelContainer}>
+          <View style={styles.panelHeader}>
+            <Text style={styles.panelLabel}>// ACTIVE ROOMS</Text>
+          </View>
+          <View style={styles.panelBody}>
+            <GameList />
+          </View>
         </View>
 
+        {/* Action buttons */}
         <View style={styles.buttonContainer}>
           <TouchableOpacity
-            style={styles.button}
+            style={[styles.button, styles.buttonJoin]}
             onPress={() => setShowJoinModal(true)}
+            activeOpacity={0.7}
           >
-            <Ionicons name="enter-outline" size={24} color="#fff" style={styles.buttonIcon} />
-            <Text style={styles.buttonText}>Join with Code</Text>
+            <Ionicons name="enter-outline" size={18} color={T.green} style={styles.buttonIcon} />
+            <Text style={[styles.buttonText, { color: T.green }]}>JOIN WITH CODE</Text>
           </TouchableOpacity>
 
           <TouchableOpacity
-            style={styles.button}
+            style={[styles.button, styles.buttonCreate]}
             onPress={() => setShowCreateModal(true)}
+            activeOpacity={0.7}
           >
-            <Ionicons name="add-circle-outline" size={24} color="#fff" style={styles.buttonIcon} />
-            <Text style={styles.buttonText}>Create Room</Text>
+            <Ionicons name="add-circle-outline" size={18} color={T.blue} style={styles.buttonIcon} />
+            <Text style={[styles.buttonText, { color: T.blue }]}>CREATE ROOM</Text>
           </TouchableOpacity>
         </View>
 
+        {/* Nav */}
         <View style={styles.nav}>
           <Link href="/about" style={styles.navLink}>
-            <Text style={styles.navLinkText}>About</Text>
+            <Text style={styles.navLinkText}>ABOUT</Text>
           </Link>
+          <Text style={styles.navDivider}>|</Text>
           <Link href="/rules" style={styles.navLink}>
-            <Text style={styles.navLinkText}>Rules</Text>
+            <Text style={styles.navLinkText}>RULES</Text>
           </Link>
         </View>
 
@@ -101,97 +132,167 @@ export default function Index() {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: '#0f0f0f',
+    backgroundColor: T.bg,
   },
   contentContainer: {
     flexGrow: 1,
+    minHeight: '100%',
   },
   content: {
     flex: 1,
     alignItems: 'center',
-    justifyContent: 'space-between',
-    padding: 20,
+    justifyContent: 'flex-start',
+    paddingHorizontal: 20,
+    paddingVertical: 30,
+    maxWidth: 700,
+    width: '100%',
+    alignSelf: 'center',
+  },
+  headerBar: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    alignSelf: 'stretch',
+    borderBottomWidth: 1,
+    borderColor: T.border,
+    paddingBottom: 10,
+    marginBottom: 30,
+  },
+  headerBarText: {
+    fontFamily: 'Orbitron',
+    fontSize: 10,
+    color: T.textDim,
+    letterSpacing: 2,
+    flex: 1,
+  },
+  statusDot: {
+    width: 6,
+    height: 6,
+    borderRadius: 3,
+    backgroundColor: T.green,
+    marginRight: 5,
+  },
+  statusText: {
+    fontFamily: T.mono,
+    fontSize: 10,
+    color: T.green,
+    letterSpacing: 1,
   },
   titleContainer: {
     alignItems: 'center',
-    marginVertical: 20,
+    marginBottom: 24,
   },
   titleHiLo: {
     fontFamily: 'AlexBrush',
-    fontSize: 60,
-    fontWeight: 'bold',
-    color: '#f0f0f0',
-    textShadowColor: 'rgba(255, 255, 255, 0.5)',
+    fontSize: 80,
+    color: T.textPri,
+    textShadowColor: 'rgba(0, 255, 136, 0.2)',
     textShadowOffset: { width: 0, height: 0 },
-    textShadowRadius: 10,
+    textShadowRadius: 20,
+    lineHeight: 90,
   },
-  titleRest: {
-    fontSize: 24,
-    fontWeight: 'bold',
-    color: '#f0f0f0',
-    textTransform: 'uppercase',
-    letterSpacing: 2,
-    marginTop: 5,
+  titleSub: {
+    fontFamily: 'Orbitron',
+    fontSize: 13,
+    color: T.textSec,
+    letterSpacing: 5,
+    marginTop: -4,
+  },
+  titleDivider: {
+    width: 60,
+    height: 1,
+    backgroundColor: T.green,
+    marginTop: 14,
+    opacity: 0.6,
   },
   introduction: {
-    fontSize: 16,
-    color: '#ddd',
+    fontSize: 13,
+    color: T.textSec,
     textAlign: 'center',
-    marginBottom: 20,
-    lineHeight: 24,
+    marginBottom: 28,
+    lineHeight: 22,
+    fontFamily: T.mono,
+    maxWidth: 480,
   },
   linkText: {
-    color: '#3b82f6',
+    color: T.green,
     textDecorationLine: 'underline',
   },
-  gameList: {
-    width: '90%',
-    backgroundColor: '#0f0f0f',
-    borderRadius: 10,
-    padding: 15,
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 10 },
-    shadowOpacity: 0.9,
-    shadowRadius: 30,
+  panelContainer: {
+    width: '100%',
+    borderWidth: 1,
+    borderColor: T.border,
+    borderRadius: 2,
+    marginBottom: 24,
+    overflow: 'hidden',
+  },
+  panelHeader: {
+    backgroundColor: T.surface,
+    paddingVertical: 8,
+    paddingHorizontal: 14,
+    borderBottomWidth: 1,
+    borderBottomColor: T.border,
+  },
+  panelLabel: {
+    fontFamily: T.mono,
+    fontSize: 11,
+    color: T.textDim,
+    letterSpacing: 1,
+  },
+  panelBody: {
+    backgroundColor: T.bg,
+    padding: 14,
   },
   buttonContainer: {
     flexDirection: 'row',
-    justifyContent: 'space-around',
+    justifyContent: 'center',
+    gap: 12,
     width: '100%',
-    marginVertical: 20,
+    marginBottom: 24,
   },
   button: {
-    backgroundColor: '#3b82f6',
     paddingVertical: Platform.OS === 'web' ? 12 : 10,
-    paddingHorizontal: Platform.OS === 'web' ? 20 : 10,
-    borderRadius: 8,
+    paddingHorizontal: Platform.OS === 'web' ? 24 : 16,
+    borderRadius: 2,
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'center',
-    shadowColor: '#3b82f6',
-    shadowOffset: { width: 0, height: 4 },
-    shadowOpacity: 0.3,
-    shadowRadius: 5,
+    borderWidth: 1,
+  },
+  buttonJoin: {
+    backgroundColor: 'rgba(0, 255, 136, 0.05)',
+    borderColor: T.green,
+  },
+  buttonCreate: {
+    backgroundColor: 'rgba(59, 130, 246, 0.05)',
+    borderColor: T.blue,
   },
   buttonIcon: {
     marginRight: 8,
   },
   buttonText: {
-    color: '#ffffff',
-    fontSize: 16,
+    fontSize: 12,
     fontWeight: 'bold',
+    fontFamily: T.mono,
+    letterSpacing: 1.5,
   },
   nav: {
     flexDirection: 'row',
     justifyContent: 'center',
-    marginTop: 20,
+    alignItems: 'center',
+    gap: 12,
+    marginTop: 8,
+  },
+  navDivider: {
+    color: T.textDim,
+    fontSize: 12,
   },
   navLink: {
-    marginHorizontal: 10,
+    marginHorizontal: 2,
   },
   navLinkText: {
-    color: '#bbb',
-    fontSize: 16,
-    textDecorationLine: 'underline',
+    color: T.textDim,
+    fontSize: 11,
+    fontFamily: T.mono,
+    letterSpacing: 2,
   },
 });

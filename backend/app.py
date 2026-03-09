@@ -404,6 +404,12 @@ def handle_start_game(data):
     game = deserialize_game(rooms_collection.find_one({"_id": ObjectId(room_id)}).get("game", {}))
     game.start_game()
 
+    # Save to DB so state is consistent with what clients receive
+    rooms_collection.update_one(
+        {"_id": ObjectId(room_id)},
+        {"$set": {"game": serialize_game(game)}}
+    )
+
     game_data = serialize_game(game)
 
     # Emit the start_game event to all clients in the room

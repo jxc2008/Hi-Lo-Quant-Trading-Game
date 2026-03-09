@@ -1,9 +1,10 @@
 import { StyleSheet } from 'react-native';
+import { T } from './global';
 
 export const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: '#f3f4f6',
+    backgroundColor: T.bg,
   },
   scrollContainer: {
     alignItems: 'center',
@@ -14,8 +15,8 @@ export const styles = StyleSheet.create({
     width: 300,
     height: 300,
     borderRadius: 150,
-    borderWidth: 4,
-    borderColor: '#e2e8f0',
+    borderWidth: 1,
+    borderColor: T.border,
     position: 'relative',
     justifyContent: 'center',
     alignItems: 'center',
@@ -23,10 +24,10 @@ export const styles = StyleSheet.create({
   },
   playerDot: {
     position: 'absolute',
-    width: 10,
-    height: 10,
-    borderRadius: 5,
-    backgroundColor: '#4a5568',
+    width: 8,
+    height: 8,
+    borderRadius: 4,
+    backgroundColor: T.green,
   },
   gameInfo: {
     position: 'absolute',
@@ -34,10 +35,12 @@ export const styles = StyleSheet.create({
     justifyContent: 'center',
   },
   roundTitle: {
-    fontSize: 18,
+    fontSize: 12,
     fontWeight: 'bold',
     marginBottom: 8,
-    color: '#1f2937',
+    color: T.textSec,
+    fontFamily: T.mono,
+    letterSpacing: 2,
   },
   infoRow: {
     flexDirection: 'row',
@@ -46,8 +49,9 @@ export const styles = StyleSheet.create({
   },
   infoText: {
     marginLeft: 4,
-    fontSize: 14,
-    color: '#4a5568',
+    fontSize: 13,
+    color: T.textSec,
+    fontFamily: T.mono,
   },
   bidAskContainer: {
     flexDirection: 'row',
@@ -56,8 +60,9 @@ export const styles = StyleSheet.create({
     marginTop: 8,
   },
   bidAskText: {
-    fontSize: 14,
-    color: '#1f2937',
+    fontSize: 13,
+    color: T.textPri,
+    fontFamily: T.mono,
   },
   statsContainer: {
     flexDirection: 'row',
@@ -73,7 +78,8 @@ export const styles = StyleSheet.create({
   statText: {
     fontSize: 16,
     fontWeight: 'bold',
-    color: '#1f2937',
+    color: T.textPri,
+    fontFamily: T.mono,
   },
   buttonContainer: {
     flexDirection: 'row',
@@ -83,32 +89,41 @@ export const styles = StyleSheet.create({
     marginVertical: 16,
   },
   actionButton: {
-    backgroundColor: '#3b82f6',
-    paddingVertical: 12,
-    paddingHorizontal: 24,
-    borderRadius: 8,
+    backgroundColor: T.surface2,
+    paddingVertical: 10,
+    paddingHorizontal: 20,
+    borderRadius: 2,
+    borderWidth: 1,
+    borderColor: T.border,
     margin: 4,
   },
   buttonText: {
-    color: '#fff',
+    color: T.textPri,
     fontWeight: 'bold',
-    fontSize: 14,
+    fontSize: 12,
+    fontFamily: T.mono,
+    letterSpacing: 1,
   },
   contractCard: {
     width: '90%',
-    backgroundColor: '#e5e7eb',
-    borderRadius: 8,
+    backgroundColor: T.surface,
+    borderRadius: 2,
     padding: 16,
     marginTop: 20,
+    borderWidth: 1,
+    borderColor: T.border,
   },
   contractTitle: {
     fontWeight: 'bold',
-    fontSize: 16,
+    fontSize: 11,
     marginBottom: 8,
-    color: '#1f2937',
+    color: T.textSec,
+    fontFamily: T.mono,
+    letterSpacing: 2,
   },
   contractText: {
     fontSize: 14,
-    color: '#4a5568',
+    color: T.textPri,
+    fontFamily: T.mono,
   },
 });
