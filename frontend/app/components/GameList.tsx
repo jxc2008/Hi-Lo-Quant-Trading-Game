@@ -1,9 +1,15 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import { View, Text, FlatList, TouchableOpacity, Modal, TextInput, Alert } from 'react-native';
 import { gameListStyles } from '../../styles/global';
 import axios from 'axios';
 import { useRouter } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
+
+// Constants
+const API_BASE_URL = "https://hi-lo-backend.onrender.com";
+const REFRESH_INTERVAL = 5000; // 5 seconds
+const COUNTDOWN_INTERVAL = 1000; // 1 second
+const MIN_USERNAME_LENGTH = 3;
 
 export default function GameList() {
   const [rooms, setRooms] = useState([]);
@@ -41,25 +47,25 @@ export default function GameList() {
     return () => clearInterval(interval);
   }, []);
 
-  const fetchRooms = async () => {
+  const fetchRooms = useCallback(async () => {
     setIsLoading(true);
     try {
-      const response = await axios.get(`https://hi-lo-backend.onrender.com/rooms`);
+      const response = await axios.get(`${API_BASE_URL}/rooms`);
       setRooms(response.data);
 
       const roomCodeMap = {};
-      response.data.forEach((room) => {
+      response.data.forEach((room: any) => {
         roomCodeMap[room._id] = room.room_code;
       });
       setRoomCodes(roomCodeMap);
-    } catch (error) {
-      Alert.alert('Error', error);
+    } catch (error: any) {
+      Alert.alert('Error', error.message || 'Failed to fetch rooms');
     } finally {
       setIsLoading(false);
     }
-  };
+  }, []);
 
-  const openJoinModal = (room) => {
+  const openJoinModal = useCallback((room: any) => {
     setSelectedRoom(room);
     setIsJoinModalVisible(true);
     setPasswordError('');
@@ -68,24 +74,35 @@ export default function GameList() {
     setHandleTaken('');
     setUsernameLengthError('');
     setIsPrivate(room.isPrivate);
-  };
+  }, []);
 
-  const joinRoom = async () => {
-    if (!username) {
+  const resetErrorStates = useCallback(() => {
+    setPasswordError('');
+    setHandleNotSet('');
+    setRoomIsFull('');
+    setHandleTaken('');
+    setUsernameLengthError('');
+  }, []);
+
+  const joinRoom = useCallback(async () => {
+    resetErrorStates();
+
+    if (!username.trim()) {
       setHandleNotSet('Username is required');
-      setPasswordError('');
-      setRoomIsFull('');
-      setHandleTaken('');
-      setUsernameLengthError('');
+      return;
+    }
+
+    if (username.length < MIN_USERNAME_LENGTH) {
+      setUsernameLengthError(`Username must be at least ${MIN_USERNAME_LENGTH} characters long`);
       return;
     }
 
     const roomCode = roomCodes[selectedRoom._id];
 
     try {
-      const response = await axios.post(`https://hi-lo-backend.onrender.com/join-room`, {
+      const response = await axios.post(`${API_BASE_URL}/join-room`, {
         roomCode,
-        username,
+        username: username.trim(),
         password: selectedRoom.isPrivate ? password : null,
       });
 
@@ -98,47 +115,47 @@ export default function GameList() {
       router.push({
         pathname: '/waiting',
         params: {
-          roomId: selectedRoom._id,
-          username: username,
+          roomName: selectedRoom.room_name,
+          roomId: response.data.roomId,
+          username: username.trim(),
           num_players: response.data.num_players,
           player_list: response.data.player_list,
           host_username: response.data.host_username,
-          room_code: response.data.room_code,
-        },
+          room_code: roomCode,
+        }
       });
-    } catch (error) {
+    } catch (error: any) {
       const errorMessage = error.response?.data?.message || 'Failed to join room';
-      if (errorMessage === 'Invalid password') {
-        setPasswordError('Incorrect password. Please try again.');
-        setHandleNotSet('');
-        setRoomIsFull('');
-        setHandleTaken('');
-        setUsernameLengthError('');
-      } else if (errorMessage === 'Room is full') {
+      
+      if (errorMessage.includes('Invalid password')) {
+        setPasswordError('Invalid password');
+      } else if (errorMessage.includes('Room is full')) {
         setRoomIsFull('Room is full');
-        setHandleNotSet('');
-        setPasswordError('');
-        setHandleTaken('');
-        setUsernameLengthError('');
-      } else if (errorMessage === 'Username taken') {
+      } else if (errorMessage.includes('Username already taken')) {
         setHandleTaken('Username already taken in this room');
-        setHandleNotSet('');
-        setPasswordError('');
-        setRoomIsFull('');
-        setUsernameLengthError('');
-      } else if (errorMessage === 'Username must be at least 3 characters long') {
-        setUsernameLengthError('Username must be at least 3 characters long');
-        setHandleTaken('');
-        setHandleNotSet('');
-        setPasswordError('');
-        setRoomIsFull('');
+      } else if (errorMessage.includes('Username must be at least')) {
+        setUsernameLengthError(errorMessage);
       } else {
         Alert.alert('Error', errorMessage);
       }
     }
-  };
+  }, [username, password, selectedRoom, roomCodes, resetErrorStates, fetchRooms, router]);
 
-  const renderGameItem = ({ item }) => (
+  // Auto-refresh interval setup
+  useEffect(() => {
+    const interval = setInterval(() => {
+      setCountdown((prev) => {
+        if (prev <= 1) {
+          fetchRooms();
+          return 5; // Reset countdown after refresh
+        }
+        return prev - 1;
+      });
+    }, COUNTDOWN_INTERVAL);
+    return () => clearInterval(interval);
+  }, [fetchRooms]);
+
+  const renderGameItem = ({ item }: { item: any }) => (
     <View style={gameListStyles.gameItem}>
       <View style={gameListStyles.gameDetails}>
         <Text style={gameListStyles.gameName}>{item.name}</Text>
@@ -146,14 +163,14 @@ export default function GameList() {
           {item.players.length}/10 players {item.isPrivate && '🔒'}
         </Text>
       </View>
-      <View style={[gameListStyles.buttonGroup, { flexDirection: 'row', alignItems: 'center' }]}>
+      <View style={gameListStyles.buttonContainer}>
         {/* Spectate button to the LEFT, with spacing to the right */}
         <TouchableOpacity
           onPress={() => {
             // If the room object has gameData, pass it; otherwise, assume the game hasn't started.
             const started = item.gameData ? 'true' : 'false';
             router.push({
-              pathname: '/spectator',
+              pathname: '/spectator' as any,
               params: {
                 roomId: item._id,
                 started: started,
@@ -161,7 +178,7 @@ export default function GameList() {
               },
             });
           }}
-          style={[gameListStyles.spectateButton, { marginRight: 10 }]}
+          style={[gameListStyles.joinButton, { marginRight: 10, backgroundColor: '#6B7280' }]}
         >
           <Ionicons name="eye-outline" size={20} color="#fff" />
         </TouchableOpacity>
@@ -206,7 +223,7 @@ export default function GameList() {
       ) : (
         <FlatList
           data={rooms}
-          keyExtractor={(item) => item._id}
+          keyExtractor={(item: any) => item._id}
           renderItem={renderGameItem}
           style={gameListStyles.list}
           contentContainerStyle={gameListStyles.listContent}

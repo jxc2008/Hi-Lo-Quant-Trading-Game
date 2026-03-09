@@ -2,6 +2,12 @@ import random
 import time
 import datetime
 
+# Constants
+MIN_PLAYERS = 4
+INITIAL_BID = 0
+INITIAL_ASK = 21
+MIN_VALUE = 1
+MAX_VALUE = 20
 
 class Game:
     def __init__(self):
@@ -12,8 +18,8 @@ class Game:
         self.coin = None
         self.high_low = None
         self.players = []
-        self.current_bid = 0
-        self.current_ask = 21
+        self.current_bid = INITIAL_BID
+        self.current_ask = INITIAL_ASK
         self.bid_player = None
         self.ask_player = None
         self.hit_player = None
@@ -24,21 +30,25 @@ class Game:
         self.host = None
 
     def set_host(self, host):
+        """Set the game host."""
         self.host = host
     
     def get_host(self):
+        """Get the current game host."""
         return self.host
     
     def player_join(self, player):
+        """Add a player to the game."""
         self.players.append(player)
         self.player_count += 1
     
     def player_leave(self, player):
+        """Remove a player from the game."""
         self.players.remove(player)
         self.player_count -= 1
     
     def start_game(self):
-        #start the game
+        """Initialize and start the game."""
         if not self.market_active:
             print("The market is currently closed. Cannot start a new round.")
             return
@@ -47,7 +57,7 @@ class Game:
             print("A round is already running. Cannot start a new round until the current one ends.")
             return
         
-        self.round_active = True #Mark the round as active
+        self.round_active = True  # Mark the round as active
         self.player_count = len(self.players)
 
         #initialize the game

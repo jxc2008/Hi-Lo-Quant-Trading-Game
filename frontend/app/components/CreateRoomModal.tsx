@@ -1,9 +1,12 @@
-import React, { useState } from 'react';
+import React, { useState, useCallback } from 'react';
 import { View, Text, TextInput, Switch, TouchableOpacity, Modal, Alert } from 'react-native';
 import { crmStyles } from '../../styles/global';
 import axios from "axios";
-
 import { useRouter } from 'expo-router';
+
+// Constants
+const API_BASE_URL = "https://hi-lo-backend.onrender.com";
+const MIN_USERNAME_LENGTH = 3;
 
 interface CreateRoomModalProps {
   onClose: () => void;
@@ -19,44 +22,61 @@ export default function CreateRoomModal({ onClose }: CreateRoomModalProps) {
 
   const router = useRouter();
 
-  const handleSubmit = async () => {
-    if (!roomName) {
+  const handleSubmit = useCallback(async () => {
+    // Reset error states
+    setUsernameLengthError('');
+    setRoomNameError('');
+
+    if (!roomName.trim()) {
       Alert.alert('Error', 'Room name is required');
       return;
     }
 
+    if (!username.trim()) {
+      Alert.alert('Error', 'Username is required');
+      return;
+    }
+
+    if (username.length < MIN_USERNAME_LENGTH) {
+      setUsernameLengthError(`Username must be at least ${MIN_USERNAME_LENGTH} characters long`);
+      return;
+    }
+
     try {
-      const response = await axios.post("https://hi-lo-backend.onrender.com/create-room", {
-        room_name: roomName,
+      const response = await axios.post(`${API_BASE_URL}/create-room`, {
+        room_name: roomName.trim(),
         password: isPrivate ? password : null,
         isPrivate,
-        username: username,
+        username: username.trim(),
       });
 
       Alert.alert('Success', 'Room created successfully');
       onClose();
+      
       router.push({
         pathname: '/waiting',
         params: {
           roomName,
           roomId: response.data.roomId,
-          username: username,
+          username: username.trim(),
           num_players: response.data.num_players,
           player_list: response.data.player_list,
-          host_username: username,
+          host_username: username.trim(),
           room_code: response.data.room_code,
         }
       });
-    } catch (error) {
-      const errorMessage = error.response?.data?.message || 'Failed to join room';
-      if (errorMessage === "Username must be at least 3 characters long") {
-        setUsernameLengthError('Username must be at least 3 characters long');
-      } else if (errorMessage === "Room with this name already exists") {
+    } catch (error: any) {
+      const errorMessage = error.response?.data?.message || 'Failed to create room';
+      
+      if (errorMessage.includes("Username must be at least")) {
+        setUsernameLengthError(errorMessage);
+      } else if (errorMessage.includes("Room with this name already exists")) {
         setRoomNameError('Room with this name already exists');
+      } else {
+        Alert.alert('Error', errorMessage);
       }
     }
-
-  };
+  }, [roomName, username, password, isPrivate, onClose, router]);
 
   return (
     <Modal transparent animationType="fade">

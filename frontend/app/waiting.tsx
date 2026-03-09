@@ -1,7 +1,11 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import { View, Text, StyleSheet, ActivityIndicator, Button } from 'react-native';
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import { getSocket } from '../utils/socket';
+
+// Constants
+const MIN_PLAYERS = 4;
+const DOTS_ANIMATION_INTERVAL = 500;
 
 interface Player {
   username: string;
@@ -12,40 +16,32 @@ interface WaitingRoomProps {
   minPlayers?: number;
 }
 
-export default function WaitingRoom({ currentPlayers = [], minPlayers = 4 }: WaitingRoomProps) {
+export default function WaitingRoom({ currentPlayers = [], minPlayers = MIN_PLAYERS }: WaitingRoomProps) {
   const { roomName, roomId, username, num_players, player_list, host_username, room_code } = useLocalSearchParams();
   const [dots, setDots] = useState('.');
   const [players, setPlayers] = useState<string[]>(
     Array.isArray(player_list) ? player_list : player_list.split(",")
   );
   const [isHost, setIsHost] = useState(username === host_username);
-  const router = useRouter(); // Router for navigation
+  const router = useRouter();
 
+  // Socket connection and event handlers
   useEffect(() => {
     const socket = getSocket();
 
-    console.log('Attempting to connect to Socket.IO server...');
-
-    socket.on('connect', () => {
-      console.log('Connected to Socket.IO server');
+    const handleConnect = () => {
       socket.emit('join_room', { roomId, username });
-    });
+    };
 
-    socket.on('disconnect', () => {
-      console.log('Disconnected from Socket.IO server');
-    });
-
-    socket.on('player_joined', (data) => {
-      console.log('player_joined', data);
+    const handlePlayerJoined = (data: any) => {
       setPlayers((prevPlayers) => [...prevPlayers, data.username]);
-    });
+    };
 
-    socket.on('player_left', (data) => {
+    const handlePlayerLeft = (data: any) => {
       setPlayers((prevPlayers) => prevPlayers.filter((player) => player !== data.username));
-    });
+    };
 
-    socket.on('start_game', (data) => {
-      console.log('Game started, navigating to game screen...');
+    const handleStartGame = (data: any) => {
       const { roomId, gameData } = data;
       try { 
         router.push({
@@ -55,23 +51,25 @@ export default function WaitingRoom({ currentPlayers = [], minPlayers = 4 }: Wai
       } catch (error) {
         console.error('Failed to parse gameData:', error);
       }
-    });
+    };
+
+    socket.on('connect', handleConnect);
+    socket.on('player_joined', handlePlayerJoined);
+    socket.on('player_left', handlePlayerLeft);
+    socket.on('start_game', handleStartGame);
 
     return () => {
-      console.log('Cleaning up Socket.IO connection...');
-      socket.off('player_joined');
-      socket.off('player_left');
-      socket.off('connect');
-      socket.off('disconnect');
-      socket.off('start_game');
-      socket.disconnect();
+      socket.off('connect', handleConnect);
+      socket.off('player_joined', handlePlayerJoined);
+      socket.off('player_left', handlePlayerLeft);
+      socket.off('start_game', handleStartGame);
     };
-  }, []);
+  }, [roomId, username, router]);
 
+  // Cleanup handler
   useEffect(() => {
     const socket = getSocket();
-  
-    // Shared cleanup logic
+    
     const handleExit = () => {
       socket.emit('leave_game', { username, roomId });
       navigator.sendBeacon(
@@ -79,53 +77,42 @@ export default function WaitingRoom({ currentPlayers = [], minPlayers = 4 }: Wai
         JSON.stringify({ roomId, username })
       );
     };
-  
-    // Handle tab close or refresh
+    
     const handleBeforeUnload = (event: BeforeUnloadEvent) => {
       event.preventDefault();
       handleExit();
     };
-  
-    // Handle back/forward navigation
+    
     const handlePopState = () => {
       handleExit();
     };
-  
-    // Add event listeners
+    
     window.addEventListener('beforeunload', handleBeforeUnload);
     window.addEventListener('popstate', handlePopState);
-  
-    // Cleanup function
+    
     return () => {
       handleExit();
       window.removeEventListener('beforeunload', handleBeforeUnload);
       window.removeEventListener('popstate', handlePopState);
-  
-      // Clean up socket listeners
-      socket.off('player_left');
-      socket.off('update_host');
-      socket.off('start_round');
-      socket.off('end_round');
-      socket.off('game_ended');
     };
   }, [roomId, username]);
   
+  // Dots animation for loading text
   useEffect(() => {
     const interval = setInterval(() => {
       setDots(prev => (prev.length < 3 ? prev + '.' : '.'));
-    }, 500);
+    }, DOTS_ANIMATION_INTERVAL);
 
     return () => clearInterval(interval);
   }, []);
 
   const playersNeeded = Math.max(0, minPlayers - Number(players.length));
 
-  const handleStartGame = () => {
+  const handleStartGame = useCallback(() => {
     const socket = getSocket();
-    console.log('Starting game...');
     socket.emit('start_game', { roomId });
     socket.emit('start_round', { roomId });
-  };
+  }, [roomId]);
 
   return (
     <View style={styles.container}>

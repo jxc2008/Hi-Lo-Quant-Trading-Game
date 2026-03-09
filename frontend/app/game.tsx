@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useRef } from 'react';
+import React, { useState, useEffect, useRef, useCallback } from 'react';
 import {
   Modal,
   View,
@@ -15,6 +15,15 @@ import { useNavigation } from '@react-navigation/native';
 import { useLocalSearchParams } from 'expo-router';
 import { getSocket } from '../utils/socket';
 import { PlayerRole } from './components/PlayerInfoPopup';
+
+// Constants
+const ROUND_DURATION = 300; // 5 minutes in seconds
+const DEBUG_ROUND_DURATION = 10; // for debugging
+const MIN_BID_ASK = 1;
+const MAX_BID_ASK = 20;
+const INITIAL_ASK = 21;
+const INITIAL_BID = 0;
+const HOMEPAGE_URL = "https://hilotrader.org";
 
 const styles = StyleSheet.create({
   container: {
@@ -41,6 +50,11 @@ const styles = StyleSheet.create({
     padding: 16,
     marginBottom: 16,
     width: '100%',
+    elevation: 3,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.1,
+    shadowRadius: 4,
   },
   cardTitle: {
     fontSize: 20,
@@ -164,18 +178,20 @@ export default function GamePage() {
     'Round has started! Place your bids and asks now.',
   ]);
   const scrollRef = useRef<ScrollView>(null);
-  const [currentBid, setCurrentBid] = useState(0);
-  const [currentAsk, setCurrentAsk] = useState(21);
+  const [currentBid, setCurrentBid] = useState(INITIAL_BID);
+  const [currentAsk, setCurrentAsk] = useState(INITIAL_ASK);
   const [playerBalance, setPlayerBalance] = useState(0);
   const [playerRole, setPlayerRole] = useState<PlayerRole>(null);
-  const [tradeContract, setTradeContract] = useState('');
   const [bidAmount, setBidAmount] = useState('');
   const [askAmount, setAskAmount] = useState('');
-  const roundDuration = 10; // for debugging; adjust as needed for production
-  const [endTime, setEndTime] = useState(Date.now() + roundDuration * 1000);
-  const [timeLeft, setTimeLeft] = useState(roundDuration);
+  const [endTime, setEndTime] = useState(Date.now() + DEBUG_ROUND_DURATION * 1000);
+  const [timeLeft, setTimeLeft] = useState(DEBUG_ROUND_DURATION);
   const [endRoundPopup, setEndRoundPopup] = useState(false);
-  const [playerInfo, setPlayerInfo] = useState<{ contract: any; diceRoll?: number; coinFlip?: string }>({ contract: null });
+  const [playerInfo, setPlayerInfo] = useState<{ 
+    contract: any; 
+    diceRoll?: number; 
+    coinFlip?: string 
+  }>({ contract: null });
   const [host, setHost] = useState('');
   const [playerCount, setPlayerCount] = useState(0);
   const [currentRound, setCurrentRound] = useState(0);
@@ -185,17 +201,12 @@ export default function GamePage() {
   const [roundActive, setRoundActive] = useState(false);
   const [fairValue, setFairValue] = useState(0);
   const [players, setPlayers] = useState([]);
-  const [marketData, setMarketData] = useState({
-    bidPlayer: null,
-    askPlayer: null,
-    hitPlayer: null,
-    liftPlayer: null,
-  });
   const [newRoundPopup, setNewRoundPopup] = useState(false);
-  const [renderRound, setRenderRound] = useState(0);
 
   const { roomId, username, gameData } = useLocalSearchParams();
+  const navigation = useNavigation();
 
+  // Parse and initialize game data
   useEffect(() => {
     if (!gameData) {
       console.error('gameData is undefined or null');
@@ -207,6 +218,7 @@ export default function GamePage() {
       const parsedGameData = JSON.parse(Array.isArray(gameData) ? gameData[0] : gameData);
       const finalData = typeof parsedGameData === 'string' ? JSON.parse(parsedGameData) : parsedGameData;
 
+      // Set game state
       setHost(finalData.host);
       setPlayerCount(finalData.player_count);
       setCurrentRound(finalData.current_round);
@@ -216,6 +228,7 @@ export default function GamePage() {
       setRoundActive(finalData.round_active);
       setFairValue(finalData.fair_value);
 
+      // Process players data
       const playersData = finalData.players.map((player: any) => ({
         username: player.username,
         status: player.status,
@@ -231,13 +244,11 @@ export default function GamePage() {
 
       setPlayers(playersData);
 
+      // Set current player info
       const currentPlayer = playersData.find((p: any) => p.username === username);
-
       if (currentPlayer) {
         if (currentPlayer.contract && currentPlayer.contract.type_of_action) {
-          setPlayerInfo({
-            contract: currentPlayer.contract,
-          });
+          setPlayerInfo({ contract: currentPlayer.contract });
           setPlayerRole('contractor');
         } else {
           const hasDiceRoll = currentPlayer.record.some((record: any) => record[0] === 'dice_roll');
@@ -259,19 +270,17 @@ export default function GamePage() {
     }
   }, [gameData, username]);
 
-  const navigation = useNavigation();
-
-  // --- Player Left Event Handler with Functional State Update ---
+  // Socket event handlers
   useEffect(() => {
     const socket = getSocket();
-    socket.on('player_left', (data: any) => {
-      console.log(`${data.username} has left the game.`);
+    
+    const handlePlayerLeft = (data: any) => {
       setGameLog((prevLog) => [...prevLog, `${data.username} has left the game.`]);
 
       setPlayers((prevPlayers) => {
         const updatedPlayers = prevPlayers.filter((player: any) => player.username !== data.username);
 
-        // If the leaving player is the host, update host or end game if needed
+        // Handle host transfer or game end
         if (data.username === host) {
           if (data.newHost) {
             setHost(data.newHost);
@@ -282,7 +291,7 @@ export default function GamePage() {
           }
         }
 
-        // Optionally end the game if there are not enough players
+        // End game if not enough players
         if (updatedPlayers.length < 4 && data.username === host) {
           setGameLog((prevLog) => [...prevLog, `Not enough players to continue the game. Ending the game.`]);
           handleEndGame();
@@ -290,21 +299,21 @@ export default function GamePage() {
 
         return updatedPlayers;
       });
-    });
-
-    return () => {
-      socket.off('player_left');
     };
+
+    socket.on('player_left', handlePlayerLeft);
+    return () => socket.off('player_left', handlePlayerLeft);
   }, [host]);
 
   useEffect(() => {
     const socket = getSocket();
-    socket.on('update_host', (data: any) => {
+    
+    const handleHostUpdate = (data: any) => {
       setHost(data.newHost);
-    });
-    return () => {
-      socket.off('update_host');
     };
+
+    socket.on('update_host', handleHostUpdate);
+    return () => socket.off('update_host', handleHostUpdate);
   }, []);
 
   useEffect(() => {
@@ -321,7 +330,8 @@ export default function GamePage() {
     return () => clearInterval(timer);
   }, [endTime]);
 
-  const handleKeyInput = () => {
+  // Input handlers
+  const handleKeyInput = useCallback(() => {
     const trimmedInput = userInput.trim().toLowerCase();
     const bidMatch = trimmedInput.match(/^b(\d+)b$/);
     const askMatch = trimmedInput.match(/^a(\d+)a$/);
@@ -340,15 +350,15 @@ export default function GamePage() {
       alert('Invalid input. Please use the correct format: b{amount}b, a{amount}a, h, or l.');
     }
     setUserInput('');
-  };
+  }, [userInput]);
 
-  const handleBid = (number: number) => {
+  const handleBid = useCallback((number: number) => {
     const socket = getSocket();
-    if (isNaN(number) || number < 1 || number > 20) {
-      alert('Invalid bid. It must be between 1 and 20.');
+    if (isNaN(number) || number < MIN_BID_ASK || number > MAX_BID_ASK) {
+      alert(`Invalid bid. It must be between ${MIN_BID_ASK} and ${MAX_BID_ASK}.`);
       return;
     }
-    if (number >= currentAsk && currentAsk < 21) {
+    if (number >= currentAsk && currentAsk < INITIAL_ASK) {
       alert("Your bid is higher than or equal to the current ask.");
       return;
     }
@@ -360,14 +370,14 @@ export default function GamePage() {
     setGameLog((prevLog) => [...prevLog, `You placed a bid for $${number}.`]);
     setCurrentBid(number);
     setBidAmount("");
-  };
+  }, [roomId, username, currentAsk, currentBid]);
 
-  const handleAsk = (number: number) => {
-    if (isNaN(number) || number < 1 || number > 20) {
-      alert('Invalid ask. It must be between 1 and 20.');
+  const handleAsk = useCallback((number: number) => {
+    if (isNaN(number) || number < MIN_BID_ASK || number > MAX_BID_ASK) {
+      alert(`Invalid ask. It must be between ${MIN_BID_ASK} and ${MAX_BID_ASK}.`);
       return;
     }
-    if (number <= currentBid && currentBid > 0) {
+    if (number <= currentBid && currentBid > INITIAL_BID) {
       alert("Your ask is lower than or equal to the current bid.");
       return;
     }
@@ -380,42 +390,43 @@ export default function GamePage() {
     setGameLog((prevLog) => [...prevLog, `You placed an ask for $${number}.`]);
     setCurrentAsk(number);
     setAskAmount("");
-  };
+  }, [roomId, username, currentBid, currentAsk]);
 
-  const handleHitBid = () => {
+  const handleHitBid = useCallback(() => {
     const socket = getSocket();
-    if (currentBid > 0) {
+    if (currentBid > INITIAL_BID) {
       socket.emit("take_market", { roomId, playerName: username, action: "hit" });
     } else {
       alert('No valid bid to hit.');
     }
-  };
+  }, [roomId, username, currentBid]);
 
-  const handleLiftAsk = () => {
+  const handleLiftAsk = useCallback(() => {
     const socket = getSocket();
-    if (currentAsk < 21) {
+    if (currentAsk < INITIAL_ASK) {
       socket.emit("take_market", { roomId, playerName: username, action: "lift" });
     } else {
       alert('No valid ask to lift.');
     }
-  };
+  }, [roomId, username, currentAsk]);
 
+  // Market update handler
   useEffect(() => {
     const socket = getSocket();
-    socket.on('market_update', (data: any) => {
-      console.log(`Received market_update from server:`, data);
+    
+    const handleMarketUpdate = (data: any) => {
       if (data.action === "hit") {
         setGameLog((prevLog) => [
           ...prevLog,
           `${data.playerName} has hit the bid! Sold to ${data.bidPlayer} for $${data.price}.`,
         ]);
-        setCurrentBid(0);
+        setCurrentBid(INITIAL_BID);
       } else if (data.action === "lift") {
         setGameLog((prevLog) => [
           ...prevLog,
           `${data.playerName} has lifted the ask! Bought from ${data.askPlayer} for $${data.price}.`,
         ]);
-        setCurrentAsk(21);
+        setCurrentAsk(INITIAL_ASK);
       } else if (data.action === "ask") {
         setCurrentAsk(data.currentAsk);
         setGameLog((prevLog) => [...prevLog, data.logMessage]);
@@ -423,29 +434,33 @@ export default function GamePage() {
         setCurrentBid(data.currentBid);
         setGameLog((prevLog) => [...prevLog, data.logMessage]);
       }
-    });
-    return () => {
-      socket.off("market_update");
     };
+
+    socket.on('market_update', handleMarketUpdate);
+    return () => socket.off('market_update', handleMarketUpdate);
   }, []);
 
+  // Game ended handler
   useEffect(() => {
     const socket = getSocket();
-    socket.on('game_ended', (data: any) => {
-      const HOMEPAGE_URL = "https://hilotrader.org";
+    
+    const handleGameEnded = () => {
       window.location.href = HOMEPAGE_URL;
-    });
-    return () => {
-      socket.off('game_ended');
     };
+
+    socket.on('game_ended', handleGameEnded);
+    return () => socket.off('game_ended', handleGameEnded);
   }, []);
 
-  const [startRoundPopup, setStartRoundPopup] = useState(false);
+  // Round handlers
   useEffect(() => {
     const socket = getSocket();
-    socket.on('start_round', (data: any) => {
+    
+    const handleStartRound = (data: any) => {
       try {
         const parsedData = JSON.parse(data.gameData);
+        
+        // Update game state
         setCurrentRound(parsedData.current_round);
         setHost(parsedData.host);
         setPlayerCount(parsedData.player_count);
@@ -456,10 +471,11 @@ export default function GamePage() {
         setFairValue(parsedData.fair_value);
         setPlayers(parsedData.players || []);
 
+        // Update current player info
         const currentPlayer = (parsedData.players || []).find((p: any) => p.username === username);
         if (currentPlayer) {
           if (currentPlayer.contract && currentPlayer.contract.type_of_action) {
-            setPlayerInfo({ contract: currentPlayer.contract, diceRoll: undefined, coinFlip: undefined });
+            setPlayerInfo({ contract: currentPlayer.contract });
             setPlayerRole('contractor');
           } else {
             const hasDiceRoll = currentPlayer.record.some((record: any) => record[0] === 'dice_roll');
@@ -471,46 +487,43 @@ export default function GamePage() {
             });
             setPlayerRole('insider');
           }
-        } else {
-          console.error('Current player not found in updated players list');
         }
 
-        setStartRoundPopup(true);
-        const newRoundDuration = 300; // new round duration (e.g., 300 seconds)
-        setEndTime(Date.now() + newRoundDuration * 1000);
-        setTimeLeft(newRoundDuration);
+        // Set up new round timing
+        setEndTime(Date.now() + ROUND_DURATION * 1000);
+        setTimeLeft(ROUND_DURATION);
         setEndRoundPopup(false);
         setNewRoundPopup(true);
       } catch (error) {
         console.error('Failed to parse start_round data:', error);
       }
-    });
-    return () => {
-      socket.off('start_round');
     };
+
+    socket.on('start_round', handleStartRound);
+    return () => socket.off('start_round', handleStartRound);
   }, [username]);
 
   useEffect(() => {
     const socket = getSocket();
-    socket.on('end_round', (data: any) => {
+    
+    const handleEndRound = (data: any) => {
       try {
         const parsedData = JSON.parse(data.gameData);
-        parsedData.players.forEach((player: any) => {
-          console.log(player.username, player.round_pnl);
-        });
         setPlayers(parsedData.players);
         setEndRoundPopup(true);
       } catch (error) {
         console.error('Failed to parse end_round data:', error);
       }
-    });
-    return () => {
-      socket.off('end_round');
     };
+
+    socket.on('end_round', handleEndRound);
+    return () => socket.off('end_round', handleEndRound);
   }, []);
 
+  // Cleanup and exit handlers
   useEffect(() => {
     const socket = getSocket();
+    
     const handleExit = () => {
       socket.emit('leave_game', { username, roomId });
       navigator.sendBeacon(
@@ -518,55 +531,52 @@ export default function GamePage() {
         JSON.stringify({ roomId, username })
       );
     };
+    
     const handleBeforeUnload = (event: BeforeUnloadEvent) => {
       event.preventDefault();
       handleExit();
     };
+    
     const handlePopState = () => {
       handleExit();
     };
+    
     window.addEventListener('beforeunload', handleBeforeUnload);
     window.addEventListener('popstate', handlePopState);
+    
     return () => {
       handleExit();
       window.removeEventListener('beforeunload', handleBeforeUnload);
       window.removeEventListener('popstate', handlePopState);
-      socket.off('player_left');
-      socket.off('update_host');
-      socket.off('start_round');
-      socket.off('end_round');
-      socket.off('game_ended');
     };
   }, [roomId, username]);
 
-  const handleLeaveGame = () => {
+  // Game control functions
+  const handleLeaveGame = useCallback(() => {
     const socket = getSocket();
     if (window.confirm('Are you sure you want to leave the game?')) {
       socket.emit('leave_game', { username, roomId });
-      const HOMEPAGE_URL = "https://hilotrader.org";
       window.location.href = HOMEPAGE_URL;
     }
-  };
+  }, [username, roomId]);
 
-  const handleStartNextRound = () => {
+  const handleStartNextRound = useCallback(() => {
     if (username === host) {
       const socket = getSocket();
       socket.emit('start_round', { roomId });
       setEndRoundPopup(false);
-      const nextRoundDuration = 10; // duration for debugging
-      setEndTime(Date.now() + nextRoundDuration * 1000);
-      setTimeLeft(nextRoundDuration);
-      setCurrentAsk(21);
-      setCurrentBid(0);
+      setEndTime(Date.now() + DEBUG_ROUND_DURATION * 1000);
+      setTimeLeft(DEBUG_ROUND_DURATION);
+      setCurrentAsk(INITIAL_ASK);
+      setCurrentBid(INITIAL_BID);
     }
-  };
+  }, [username, host, roomId]);
 
-  const handleEndGame = () => {
+  const handleEndGame = useCallback(() => {
     const socket = getSocket();
     socket.emit('end_game', { roomId });
-    const HOMEPAGE_URL = "https://hilotrader.org";
     window.location.href = HOMEPAGE_URL;
-  };
+  }, [roomId]);
 
   if (loading) {
     return (
@@ -649,7 +659,7 @@ export default function GamePage() {
                   <Text style={styles.infoValue}>{playerRole}</Text>
                 </View>
                 <View style={styles.infoRow}>
-                  <FontAwesome name="file-contract" size={33} color="black" />
+                  <FontAwesome name="file-text" size={20} color="black" />
                   <Text style={styles.infoText}>Trading Information:</Text>
                   <Text style={styles.infoValue}>
                     {playerRole === 'contractor' && playerInfo.contract

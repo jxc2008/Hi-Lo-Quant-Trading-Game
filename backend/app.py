@@ -2,30 +2,34 @@ from flask import Flask, request, jsonify
 from flask_cors import CORS
 from bson.objectid import ObjectId
 from models import rooms_collection
-
 from flask_socketio import SocketIO, emit
-
 import string
 import random
 import json
-
 from game_logic import *
 from datetime import datetime
+
+# Constants
+ROOM_CODE_LENGTH = 6
+DEFAULT_PING_TIMEOUT = 60
+DEFAULT_PING_INTERVAL = 25
 
 app = Flask(__name__)
 CORS(app, origins=["*"])
 socketio = SocketIO(
     app,
     cors_allowed_origins="*",
-    ping_timeout=60,
-    ping_interval=25,
+    ping_timeout=DEFAULT_PING_TIMEOUT,
+    ping_interval=DEFAULT_PING_INTERVAL,
     transports=['websocket']
 )
 
-def generate_room_code(length=6):
+def generate_room_code(length=ROOM_CODE_LENGTH):
+    """Generate a random room code."""
     return ''.join(random.choices(string.ascii_uppercase, k=length))
 
 def serialize_game(game):
+    """Convert game object to dictionary for JSON serialization."""
     return {
         "players": [
             {
@@ -62,8 +66,8 @@ def serialize_game(game):
         "fair_value": game.fair_value,
     }
 
-
 def deserialize_game(game_data):
+    """Convert dictionary back to game object."""
     game = Game()
 
     # Restore players
