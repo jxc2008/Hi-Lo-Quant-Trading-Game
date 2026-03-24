@@ -60,7 +60,7 @@ export default function GameList() {
       });
       setRoomCodes(roomCodeMap);
     } catch (error: any) {
-      Alert.alert('Error', error.message || 'Failed to fetch rooms');
+      console.error('Failed to fetch rooms:', error.message);
     } finally {
       setIsLoading(false);
     }
