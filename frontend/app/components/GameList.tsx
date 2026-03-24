@@ -161,7 +161,7 @@ export default function GameList() {
       <View style={gameListStyles.gameDetails}>
         <Text style={gameListStyles.gameName}>{item.name}</Text>
         <Text style={gameListStyles.gameInfo}>
-          {item.players.length}/10 players {item.isPrivate && '🔒'}
+          {item.players?.length ?? 0}/10 players {item.isPrivate && '🔒'}
         </Text>
       </View>
       <View style={gameListStyles.buttonContainer}>
