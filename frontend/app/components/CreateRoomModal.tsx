@@ -4,8 +4,9 @@ import { crmStyles } from '../../styles/global';
 import axios from "axios";
 import { useRouter } from 'expo-router';
 
+import { API_BASE_URL } from '../../utils/config';
+
 // Constants
-const API_BASE_URL = "https://hi-lo-backend.onrender.com";
 const MIN_USERNAME_LENGTH = 3;
 
 interface CreateRoomModalProps {
@@ -15,6 +16,7 @@ interface CreateRoomModalProps {
 export default function CreateRoomModal({ onClose }: CreateRoomModalProps) {
   const [roomName, setRoomName] = useState('');
   const [isPrivate, setIsPrivate] = useState(false);
+  const [isAdmin, setIsAdmin] = useState(false);
   const [username, setUsername] = useState('');
   const [password, setPassword] = useState('');
   const [usernameLengthError, setUsernameLengthError] = useState('');
@@ -48,6 +50,7 @@ export default function CreateRoomModal({ onClose }: CreateRoomModalProps) {
         password: isPrivate ? password : null,
         isPrivate,
         username: username.trim(),
+        is_admin: isAdmin,
       });
 
       Alert.alert('Success', 'Room created successfully');
@@ -63,6 +66,7 @@ export default function CreateRoomModal({ onClose }: CreateRoomModalProps) {
           player_list: response.data.player_list,
           host_username: username.trim(),
           room_code: response.data.room_code,
+          is_admin: isAdmin ? 'true' : 'false',
         }
       });
     } catch (error: any) {
@@ -76,7 +80,7 @@ export default function CreateRoomModal({ onClose }: CreateRoomModalProps) {
         Alert.alert('Error', errorMessage);
       }
     }
-  }, [roomName, username, password, isPrivate, onClose, router]);
+  }, [roomName, username, password, isPrivate, isAdmin, onClose, router]);
 
   return (
     <Modal transparent animationType="fade">
@@ -121,6 +125,17 @@ export default function CreateRoomModal({ onClose }: CreateRoomModalProps) {
               value={isPrivate}
               onValueChange={setIsPrivate}
               thumbColor={isPrivate ? '#4B5563' : '#9CA3AF'}
+              trackColor={{ false: '#6B7280', true: '#1F2937' }}
+            />
+          </View>
+
+          {/* Admin Toggle */}
+          <View style={crmStyles.switchContainer}>
+            <Text style={crmStyles.label}>Join as Admin (Director)</Text>
+            <Switch
+              value={isAdmin}
+              onValueChange={setIsAdmin}
+              thumbColor={isAdmin ? '#4B5563' : '#9CA3AF'}
               trackColor={{ false: '#6B7280', true: '#1F2937' }}
             />
           </View>

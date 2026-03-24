@@ -5,8 +5,9 @@ import axios from 'axios';
 import { useRouter } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
 
+import { API_BASE_URL } from '../../utils/config';
+
 // Constants
-const API_BASE_URL = "https://hi-lo-backend.onrender.com";
 const REFRESH_INTERVAL = 5000; // 5 seconds
 const COUNTDOWN_INTERVAL = 1000; // 1 second
 const MIN_USERNAME_LENGTH = 3;

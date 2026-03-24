@@ -15,6 +15,7 @@ import { MaterialIcons, FontAwesome, FontAwesome5 } from '@expo/vector-icons';
 import { useNavigation } from '@react-navigation/native';
 import { useLocalSearchParams } from 'expo-router';
 import { getSocket } from '../utils/socket';
+import { API_BASE_URL } from '../utils/config';
 import { PlayerRole } from './components/PlayerInfoPopup';
 import { T } from '../styles/global';
 
@@ -68,6 +69,8 @@ export default function GamePage() {
   const [fairValue, setFairValue] = useState(0);
   const [players, setPlayers] = useState([]);
   const [newRoundPopup, setNewRoundPopup] = useState(false);
+  const [marketPaused, setMarketPaused] = useState(false);
+  const [settings, setSettings] = useState<{ round_duration?: number; max_rounds?: number }>({});
 
   // Flash animations
   const bidFlash = useRef(new Animated.Value(0)).current;
@@ -105,6 +108,14 @@ export default function GamePage() {
       setRoundActive(finalData.round_active);
       setFairValue(finalData.fair_value);
 
+      if (finalData.settings) {
+        setSettings(finalData.settings);
+      }
+
+      const roundDuration = finalData.settings?.round_duration || DEBUG_ROUND_DURATION;
+      setEndTime(Date.now() + roundDuration * 1000);
+      setTimeLeft(roundDuration);
+
       const playersData = finalData.players.map((player: any) => ({
         username: player.username,
         status: player.status,
@@ -131,7 +142,7 @@ export default function GamePage() {
           setPlayerInfo({
             contract: null,
             diceRoll: diceRoll,
-            coinFlip: currentPlayer.highLow || finalData.coin,
+            coinFlip: currentPlayer.highLow || undefined,
           });
           setPlayerRole('insider');
         }
@@ -140,6 +151,7 @@ export default function GamePage() {
       }
 
       setLoading(false);
+      setNewRoundPopup(true);
       Animated.timing(fadeAnim, { toValue: 1, duration: 600, useNativeDriver: true }).start();
     } catch (error) {
       console.error('Failed to parse gameData:', error);
@@ -204,12 +216,13 @@ export default function GamePage() {
 
   // Timer
   useEffect(() => {
+    if (marketPaused) return; // Don't tick when paused
     const timer = setInterval(() => {
       const newTimeLeft = Math.max(Math.floor((endTime - Date.now()) / 1000), 0);
       setTimeLeft(newTimeLeft);
     }, 1000);
     return () => clearInterval(timer);
-  }, [endTime]);
+  }, [endTime, marketPaused]);
 
   // Input handlers
   const handleKeyInput = useCallback(() => {
@@ -324,6 +337,30 @@ export default function GamePage() {
     return () => socket.off('game_ended', handleGameEnded);
   }, []);
 
+  // Market paused/resumed
+  useEffect(() => {
+    const socket = getSocket();
+    const handleMarketPaused = (data: any) => {
+      setMarketPaused(true);
+      if (data?.time_remaining !== undefined) {
+        setTimeLeft(Math.ceil(data.time_remaining));
+      }
+    };
+    const handleMarketResumed = (data: any) => {
+      setMarketPaused(false);
+      if (data?.time_remaining !== undefined) {
+        setTimeLeft(Math.ceil(data.time_remaining));
+        setEndTime(Date.now() + data.time_remaining * 1000);
+      }
+    };
+    socket.on('market_paused', handleMarketPaused);
+    socket.on('market_resumed', handleMarketResumed);
+    return () => {
+      socket.off('market_paused', handleMarketPaused);
+      socket.off('market_resumed', handleMarketResumed);
+    };
+  }, []);
+
   // Start round
   useEffect(() => {
     const socket = getSocket();
@@ -333,12 +370,11 @@ export default function GamePage() {
         setCurrentRound(parsedData.current_round);
         setHost(parsedData.host);
         setPlayerCount(parsedData.player_count);
-        setDices(parsedData.dices);
-        setCoin(parsedData.coin);
         setMarketActive(parsedData.market_active);
         setRoundActive(parsedData.round_active);
-        setFairValue(parsedData.fair_value);
         setPlayers(parsedData.players || []);
+        setCurrentBid(parsedData.current_bid ?? INITIAL_BID);
+        setCurrentAsk(parsedData.current_ask ?? INITIAL_ASK);
 
         const currentPlayer = (parsedData.players || []).find((p: any) => p.username === username);
         if (currentPlayer) {
@@ -348,14 +384,19 @@ export default function GamePage() {
           } else {
             const hasDiceRoll = currentPlayer.record.some((record: any) => record[0] === 'dice_roll');
             const diceRoll = hasDiceRoll ? currentPlayer.record.find((record: any) => record[0] === 'dice_roll')[1] : undefined;
-            setPlayerInfo({ contract: null, diceRoll, coinFlip: currentPlayer.highLow || parsedData.coin });
+            setPlayerInfo({ contract: null, diceRoll, coinFlip: currentPlayer.high_low || undefined });
             setPlayerRole('insider');
           }
         }
 
-        setEndTime(Date.now() + ROUND_DURATION * 1000);
-        setTimeLeft(ROUND_DURATION);
+        if (parsedData.settings) {
+          setSettings(parsedData.settings);
+        }
+        const roundDuration = parsedData.settings?.round_duration || settings.round_duration || ROUND_DURATION;
+        setEndTime(Date.now() + roundDuration * 1000);
+        setTimeLeft(roundDuration);
         setEndRoundPopup(false);
+        setMarketPaused(false);
         setNewRoundPopup(true);
       } catch (error) {
         console.error('Failed to parse start_round data:', error);
@@ -372,6 +413,9 @@ export default function GamePage() {
       try {
         const parsedData = JSON.parse(data.gameData);
         setPlayers(parsedData.players);
+        if (parsedData.fair_value !== undefined) {
+          setFairValue(parsedData.fair_value);
+        }
         setEndRoundPopup(true);
       } catch (error) {
         console.error('Failed to parse end_round data:', error);
@@ -381,12 +425,24 @@ export default function GamePage() {
     return () => socket.off('end_round', handleEndRound);
   }, []);
 
+  // Settings updated
+  useEffect(() => {
+    const socket = getSocket();
+    const handleSettingsUpdated = (data: any) => {
+      if (data.settings) {
+        setSettings(data.settings);
+      }
+    };
+    socket.on('settings_updated', handleSettingsUpdated);
+    return () => socket.off('settings_updated', handleSettingsUpdated);
+  }, []);
+
   // Cleanup
   useEffect(() => {
     const socket = getSocket();
     const handleExit = () => {
       socket.emit('leave_game', { username, roomId });
-      navigator.sendBeacon("https://hi-lo-backend.onrender.com/disconnect", JSON.stringify({ roomId, username }));
+      navigator.sendBeacon(`${API_BASE_URL}/disconnect`, JSON.stringify({ roomId, username }));
     };
     const handleBeforeUnload = (event: BeforeUnloadEvent) => { event.preventDefault(); handleExit(); };
     const handlePopState = () => { handleExit(); };
@@ -412,12 +468,13 @@ export default function GamePage() {
       const socket = getSocket();
       socket.emit('start_round', { roomId });
       setEndRoundPopup(false);
-      setEndTime(Date.now() + DEBUG_ROUND_DURATION * 1000);
-      setTimeLeft(DEBUG_ROUND_DURATION);
+      const roundDuration = settings.round_duration || DEBUG_ROUND_DURATION;
+      setEndTime(Date.now() + roundDuration * 1000);
+      setTimeLeft(roundDuration);
       setCurrentAsk(INITIAL_ASK);
       setCurrentBid(INITIAL_BID);
     }
-  }, [username, host, roomId]);
+  }, [username, host, roomId, settings]);
 
   const handleEndGame = useCallback(() => {
     const socket = getSocket();
@@ -467,9 +524,9 @@ export default function GamePage() {
         <Text style={styles.topBarLabel}>HI-LO TRADING TERMINAL</Text>
         <Text style={styles.topBarMid}>RND <Text style={styles.topBarValue}>{currentRound}</Text></Text>
         <View style={styles.topBarRight}>
-          <View style={[styles.statusDot, { backgroundColor: roundActive ? T.green : T.textDim }]} />
-          <Text style={[styles.topBarStatus, { color: roundActive ? T.green : T.textDim }]}>
-            {roundActive ? 'LIVE' : 'IDLE'}
+          <View style={[styles.statusDot, { backgroundColor: roundActive ? (marketPaused ? T.amber : T.green) : T.textDim }]} />
+          <Text style={[styles.topBarStatus, { color: roundActive ? (marketPaused ? T.amber : T.green) : T.textDim }]}>
+            {roundActive ? (marketPaused ? 'PAUSED' : 'LIVE') : 'IDLE'}
           </Text>
         </View>
       </View>
@@ -519,7 +576,7 @@ export default function GamePage() {
           {/* Timer bar */}
           <View style={styles.timerTrack}>
             <View style={[styles.timerFill, {
-              width: `${(timeLeft / ROUND_DURATION) * 100}%` as any,
+              width: `${(timeLeft / (settings.round_duration || ROUND_DURATION)) * 100}%` as any,
               backgroundColor: timeLeft < 30 ? T.red : T.green,
             }]} />
           </View>
@@ -549,8 +606,9 @@ export default function GamePage() {
               </TouchableOpacity>
             </View>
             <TouchableOpacity
-              style={[styles.tradeBtn, { borderColor: T.green, backgroundColor: 'rgba(0,255,136,0.08)' }]}
+              style={[styles.tradeBtn, { borderColor: T.green, backgroundColor: 'rgba(0,255,136,0.08)', opacity: marketPaused ? 0.4 : 1 }]}
               onPress={() => handleBid(parseInt(bidAmount))}
+              disabled={marketPaused}
             >
               <Text style={[styles.tradeBtnText, { color: T.green }]}>PLACE BID</Text>
             </TouchableOpacity>
@@ -576,8 +634,9 @@ export default function GamePage() {
               </TouchableOpacity>
             </View>
             <TouchableOpacity
-              style={[styles.tradeBtn, { borderColor: T.red, backgroundColor: 'rgba(255,59,92,0.08)' }]}
+              style={[styles.tradeBtn, { borderColor: T.red, backgroundColor: 'rgba(255,59,92,0.08)', opacity: marketPaused ? 0.4 : 1 }]}
               onPress={() => handleAsk(parseInt(askAmount))}
+              disabled={marketPaused}
             >
               <Text style={[styles.tradeBtnText, { color: T.red }]}>PLACE ASK</Text>
             </TouchableOpacity>
@@ -586,8 +645,9 @@ export default function GamePage() {
           {/* Hit / Lift */}
           <View style={styles.hitLiftRow}>
             <TouchableOpacity
-              style={[styles.hitLiftBtn, { borderColor: T.red, backgroundColor: 'rgba(255,59,92,0.12)' }]}
+              style={[styles.hitLiftBtn, { borderColor: T.red, backgroundColor: 'rgba(255,59,92,0.12)', opacity: marketPaused ? 0.4 : 1 }]}
               onPress={handleHitBid}
+              disabled={marketPaused}
             >
               <MaterialIcons name="arrow-downward" size={16} color={T.red} />
               <Text style={[styles.hitLiftText, { color: T.red }]}>
@@ -595,8 +655,9 @@ export default function GamePage() {
               </Text>
             </TouchableOpacity>
             <TouchableOpacity
-              style={[styles.hitLiftBtn, { borderColor: T.green, backgroundColor: 'rgba(0,255,136,0.12)' }]}
+              style={[styles.hitLiftBtn, { borderColor: T.green, backgroundColor: 'rgba(0,255,136,0.12)', opacity: marketPaused ? 0.4 : 1 }]}
               onPress={handleLiftAsk}
+              disabled={marketPaused}
             >
               <MaterialIcons name="arrow-upward" size={16} color={T.green} />
               <Text style={[styles.hitLiftText, { color: T.green }]}>
@@ -634,7 +695,7 @@ export default function GamePage() {
                     <Text style={[styles.roleInfoValue, { color: T.cyan }]}>{playerInfo.diceRoll}</Text>
                   </View>
                 )}
-                {playerInfo.coinFlip && (
+                {playerInfo.coinFlip && !playerInfo.diceRoll && (
                   <View style={styles.roleInfoRow}>
                     <Text style={styles.roleInfoLabel}>COIN FLIP</Text>
                     <Text style={[styles.roleInfoValue, { color: T.cyan }]}>{playerInfo.coinFlip?.toUpperCase()}</Text>

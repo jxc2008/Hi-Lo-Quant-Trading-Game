@@ -1,14 +1,12 @@
 import io from 'socket.io-client';
+import { WS_URL } from './config';
 
-
-// Create a function to get or initialize the socket
 let socket: any = null;
-
 
 export const getSocket = () => {
   if (!socket) {
-    socket = io("wss://hi-lo-backend.onrender.com", {
-      transports: ['websocket'],
+    socket = io(WS_URL, {
+      transports: ['websocket', 'polling'],
       reconnection: true,
       reconnectionAttempts: 5,
       reconnectionDelay: 1000,

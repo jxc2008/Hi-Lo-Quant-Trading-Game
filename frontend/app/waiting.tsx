@@ -1,7 +1,8 @@
 import React, { useState, useEffect, useCallback } from 'react';
-import { View, Text, StyleSheet, TouchableOpacity, Animated } from 'react-native';
+import { View, Text, StyleSheet, TouchableOpacity, Animated, TextInput } from 'react-native';
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import { getSocket } from '../utils/socket';
+import { API_BASE_URL } from '../utils/config';
 import { T } from '../styles/global';
 
 // Constants
@@ -18,12 +19,15 @@ interface WaitingRoomProps {
 }
 
 export default function WaitingRoom({ currentPlayers = [], minPlayers = MIN_PLAYERS }: WaitingRoomProps) {
-  const { roomName, roomId, username, num_players, player_list, host_username, room_code } = useLocalSearchParams();
+  const { roomName, roomId, username, num_players, player_list, host_username, room_code, is_admin } = useLocalSearchParams();
   const [dots, setDots] = useState('.');
+  const [settingsRoundDuration, setSettingsRoundDuration] = useState('300');
+  const [settingsMaxRounds, setSettingsMaxRounds] = useState('5');
   const [players, setPlayers] = useState<string[]>(
     Array.isArray(player_list) ? player_list : player_list.split(",")
   );
   const [isHost, setIsHost] = useState(username === host_username);
+  const isAdminUser = is_admin === 'true';
   const router = useRouter();
 
   const pulseAnim = useState(new Animated.Value(0.4))[0];
@@ -70,10 +74,17 @@ export default function WaitingRoom({ currentPlayers = [], minPlayers = MIN_PLAY
     const handleStartGame = (data: any) => {
       const { roomId, gameData } = data;
       try {
-        router.push({
-          pathname: '/game',
-          params: { roomId, username, gameData: JSON.stringify(gameData) },
-        });
+        if (isAdminUser) {
+          router.push({
+            pathname: '/admin',
+            params: { roomId, username, gameData: JSON.stringify(gameData) },
+          });
+        } else {
+          router.push({
+            pathname: '/game',
+            params: { roomId, username, gameData: JSON.stringify(gameData) },
+          });
+        }
       } catch (error) {
         console.error('Failed to parse gameData:', error);
       }
@@ -99,7 +110,7 @@ export default function WaitingRoom({ currentPlayers = [], minPlayers = MIN_PLAY
     const handleExit = () => {
       socket.emit('leave_game', { username, roomId });
       navigator.sendBeacon(
-        "https://hi-lo-backend.onrender.com/disconnect",
+        `${API_BASE_URL}/disconnect`,
         JSON.stringify({ roomId, username })
       );
     };
@@ -123,6 +134,19 @@ export default function WaitingRoom({ currentPlayers = [], minPlayers = MIN_PLAY
     };
   }, [roomId, username]);
 
+  // Settings updated listener
+  useEffect(() => {
+    const socket = getSocket();
+    const handleSettingsUpdated = (data: any) => {
+      if (data.settings) {
+        setSettingsRoundDuration(String(data.settings.round_duration || ''));
+        setSettingsMaxRounds(String(data.settings.max_rounds || ''));
+      }
+    };
+    socket.on('settings_updated', handleSettingsUpdated);
+    return () => socket.off('settings_updated', handleSettingsUpdated);
+  }, []);
+
   // Dots animation for loading text
   useEffect(() => {
     const interval = setInterval(() => {
@@ -131,12 +155,21 @@ export default function WaitingRoom({ currentPlayers = [], minPlayers = MIN_PLAY
     return () => clearInterval(interval);
   }, []);
 
-  const playersNeeded = Math.max(0, minPlayers - Number(players.length));
+  const effectiveMinPlayers = isAdminUser ? 1 : minPlayers;
+  const playersNeeded = Math.max(0, effectiveMinPlayers - Number(players.length));
 
   const handleStartGame = useCallback(() => {
     const socket = getSocket();
     socket.emit('start_game', { roomId });
   }, [roomId]);
+
+  const handleUpdateSettings = useCallback(() => {
+    const socket = getSocket();
+    const newSettings: any = {};
+    if (settingsRoundDuration) newSettings.round_duration = parseInt(settingsRoundDuration, 10);
+    if (settingsMaxRounds) newSettings.max_rounds = parseInt(settingsMaxRounds, 10);
+    socket.emit('update_settings', { roomId, settings: newSettings });
+  }, [roomId, settingsRoundDuration, settingsMaxRounds]);
 
   return (
     <Animated.View style={[styles.container, { opacity: fadeAnim }]}>
@@ -171,9 +204,9 @@ export default function WaitingRoom({ currentPlayers = [], minPlayers = MIN_PLAY
 
         {/* Progress bar */}
         <View style={styles.progressTrack}>
-          <View style={[styles.progressFill, { width: `${Math.min((players.length / minPlayers) * 100, 100)}%` as any }]} />
+          <View style={[styles.progressFill, { width: `${Math.min((players.length / effectiveMinPlayers) * 100, 100)}%` as any }]} />
         </View>
-        <Text style={styles.progressLabel}>{players.length} / {minPlayers} PLAYERS</Text>
+        <Text style={styles.progressLabel}>{players.length} / {effectiveMinPlayers} PLAYERS</Text>
 
         {/* Player list */}
         <View style={styles.playersPanel}>
@@ -186,7 +219,7 @@ export default function WaitingRoom({ currentPlayers = [], minPlayers = MIN_PLAY
                   <Text style={[styles.playerName, item === username && styles.playerNameSelf]}>
                     {item}{item === username ? ' (you)' : ''}
                   </Text>
-                  {index === 0 && <Text style={styles.hostBadge}>HOST</Text>}
+                  {index === 0 && <Text style={styles.hostBadge}>{isAdminUser && item === username ? 'ADMIN' : 'HOST'}</Text>}
                 </View>
               ))
             ) : (
@@ -194,7 +227,7 @@ export default function WaitingRoom({ currentPlayers = [], minPlayers = MIN_PLAY
             )}
 
             {/* Empty slots */}
-            {Array.from({ length: Math.max(0, minPlayers - players.length) }).map((_, i) => (
+            {Array.from({ length: Math.max(0, effectiveMinPlayers - players.length) }).map((_, i) => (
               <View key={`empty-${i}`} style={styles.playerRowEmpty}>
                 <View style={styles.playerDotEmpty} />
                 <Text style={styles.playerNameEmpty}>WAITING{dots}</Text>
@@ -203,8 +236,42 @@ export default function WaitingRoom({ currentPlayers = [], minPlayers = MIN_PLAY
           </View>
         </View>
 
+        {/* Settings panel (admin only) */}
+        {isAdminUser && (
+          <View style={styles.settingsPanel}>
+            <Text style={styles.settingsPanelTitle}>// GAME SETTINGS</Text>
+            <View style={styles.settingsContent}>
+              <View style={styles.settingsRow}>
+                <Text style={styles.settingsLabel}>ROUND DURATION (s)</Text>
+                <TextInput
+                  style={styles.settingsInput}
+                  value={settingsRoundDuration}
+                  onChangeText={setSettingsRoundDuration}
+                  keyboardType="numeric"
+                  placeholder="300"
+                  placeholderTextColor={T.textDim}
+                />
+              </View>
+              <View style={styles.settingsRow}>
+                <Text style={styles.settingsLabel}>MAX ROUNDS</Text>
+                <TextInput
+                  style={styles.settingsInput}
+                  value={settingsMaxRounds}
+                  onChangeText={setSettingsMaxRounds}
+                  keyboardType="numeric"
+                  placeholder="5"
+                  placeholderTextColor={T.textDim}
+                />
+              </View>
+              <TouchableOpacity style={styles.updateSettingsBtn} onPress={handleUpdateSettings} activeOpacity={0.7}>
+                <Text style={styles.updateSettingsBtnText}>UPDATE SETTINGS</Text>
+              </TouchableOpacity>
+            </View>
+          </View>
+        )}
+
         {/* Start button (host only, when ready) */}
-        {players.length >= minPlayers && isHost && (
+        {players.length >= effectiveMinPlayers && isHost && (
           <TouchableOpacity style={styles.startButton} onPress={handleStartGame} activeOpacity={0.7}>
             <Text style={styles.startButtonText}>▶ START GAME</Text>
           </TouchableOpacity>
@@ -424,6 +491,72 @@ const styles = StyleSheet.create({
     color: T.textDim,
     textAlign: 'center',
     paddingVertical: 16,
+    letterSpacing: 1,
+  },
+  settingsPanel: {
+    width: '100%',
+    borderWidth: 1,
+    borderColor: T.border,
+    borderRadius: 2,
+    overflow: 'hidden',
+    marginBottom: 24,
+  },
+  settingsPanelTitle: {
+    fontFamily: T.mono,
+    fontSize: 10,
+    color: T.textDim,
+    letterSpacing: 2,
+    paddingVertical: 8,
+    paddingHorizontal: 14,
+    backgroundColor: T.surface,
+    borderBottomWidth: 1,
+    borderColor: T.border,
+  },
+  settingsContent: {
+    padding: 14,
+    gap: 10,
+  },
+  settingsRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    gap: 10,
+  },
+  settingsLabel: {
+    fontFamily: T.mono,
+    fontSize: 11,
+    color: T.textSec,
+    letterSpacing: 1,
+    flex: 1,
+  },
+  settingsInput: {
+    width: 80,
+    height: 32,
+    borderWidth: 1,
+    borderColor: T.border,
+    borderRadius: 2,
+    paddingHorizontal: 8,
+    textAlign: 'center',
+    fontFamily: T.mono,
+    fontSize: 14,
+    fontWeight: 'bold',
+    color: T.textPri,
+    backgroundColor: T.surface2,
+  },
+  updateSettingsBtn: {
+    paddingVertical: 10,
+    borderWidth: 1,
+    borderColor: T.blue,
+    borderRadius: 2,
+    alignItems: 'center',
+    backgroundColor: 'rgba(59,130,246,0.08)',
+    marginTop: 4,
+  },
+  updateSettingsBtnText: {
+    fontFamily: T.mono,
+    fontSize: 11,
+    fontWeight: 'bold',
+    color: T.blue,
     letterSpacing: 1,
   },
   startButton: {

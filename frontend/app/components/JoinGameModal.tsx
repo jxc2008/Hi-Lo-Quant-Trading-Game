@@ -2,7 +2,7 @@ import React, { useState } from 'react';
 import { View, Text, TextInput, TouchableOpacity, Modal, Alert } from 'react-native';
 import { joinModalStyles } from '../../styles/global';
 import axios from 'axios';
-
+import { API_BASE_URL } from '../../utils/config';
 import { useRouter } from 'expo-router';
 
 interface JoinGameModalProps {
@@ -45,7 +45,7 @@ export default function JoinGameModal({ onClose }: JoinGameModalProps) {
     }
 
     try {
-      const response = await axios.post(`https://hi-lo-backend.onrender.com/join-room`, {
+      const response = await axios.post(`${API_BASE_URL}/join-room`, {
         roomCode: code,
         username: handle,
         password: password || null,
