@@ -16,7 +16,7 @@ import { getSocket } from '../utils/socket';
 import { API_BASE_URL } from '../utils/config';
 import { T } from '../styles/global';
 
-const HOMEPAGE_URL = "https://hilotrader.org";
+const HOMEPAGE_URL = "https://bachilo.com";
 const INITIAL_ASK = 21;
 const INITIAL_BID = 0;
 

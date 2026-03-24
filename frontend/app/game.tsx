@@ -26,7 +26,7 @@ const MIN_BID_ASK = 1;
 const MAX_BID_ASK = 20;
 const INITIAL_ASK = 21;
 const INITIAL_BID = 0;
-const HOMEPAGE_URL = "https://hilotrader.org";
+const HOMEPAGE_URL = "https://bachilo.com";
 
 // Classify a log line for color-coding
 function classifyLog(line: string): 'buy' | 'sell' | 'join' | 'system' | 'default' {
