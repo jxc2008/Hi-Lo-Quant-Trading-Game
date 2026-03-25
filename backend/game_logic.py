@@ -28,6 +28,10 @@ class Game:
         self.round_active = False
         self.fair_value = 0
         self.host = None
+        self.market_paused = False
+        self.settings = {"round_duration": 300, "max_rounds": 5}
+        self.round_end_time = 0
+        self.time_remaining = 0
 
     def set_host(self, host):
         """Set the game host."""
