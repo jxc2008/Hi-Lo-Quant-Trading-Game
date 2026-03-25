@@ -1,5 +1,5 @@
 import eventlet
-eventlet.monkey_patch()
+eventlet.monkey_patch(dns=False)
 
 from flask import Flask, request, jsonify
 from flask_cors import CORS
