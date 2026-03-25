@@ -70,6 +70,7 @@ export default function GamePage() {
   const [players, setPlayers] = useState([]);
   const [newRoundPopup, setNewRoundPopup] = useState(false);
   const [marketPaused, setMarketPaused] = useState(false);
+  const [tutorialStep, setTutorialStep] = useState<number | null>(null);
   const [settings, setSettings] = useState<{ round_duration?: number; max_rounds?: number }>({});
 
   // Flash animations
@@ -482,6 +483,57 @@ export default function GamePage() {
     window.location.href = HOMEPAGE_URL;
   }, [roomId]);
 
+  const TUTORIAL_STEPS = [
+    {
+      title: '// WELCOME TO THE TERMINAL',
+      body: 'This is the Hi-Lo Quant Trading Game.\n\nEach round, players are secretly assigned roles and must trade to profit. The market closes when time runs out and the fair value is revealed.\n\nThis tutorial walks you through each section of the screen.',
+    },
+    {
+      title: '// YOUR POSITION',
+      body: 'The YOUR POSITION card shows your secret role for this round.\n\n◆ CONTRACTOR — You must fulfill a trade obligation (e.g. LONG @ 3 means you need to buy at least 3 times). Failure costs you $100.\n\n● INSIDER — You know a piece of private info: either a dice value or the coin flip (HIGH = highest dice wins, LOW = lowest wins). Use this edge to trade profitably.',
+    },
+    {
+      title: '// MARKET',
+      body: 'The MARKET card shows the live bid and ask.\n\nBID (green) — the highest price anyone is currently willing to buy at.\nASK (red) — the lowest price anyone is currently willing to sell at.\n\nBALANCE tracks your P&L this session. TIME shows how long is left in the round.',
+    },
+    {
+      title: '// TRADE',
+      body: 'Use the TRADE card to interact with the market.\n\nPLACE BID — offer to buy at your chosen price (must beat current bid).\nPLACE ASK — offer to sell at your chosen price (must beat current ask).\n\nHIT BID — immediately sell to whoever placed the bid.\nLIFT ASK — immediately buy from whoever placed the ask.\n\nUse + / − steppers or type a number directly.',
+    },
+    {
+      title: '// LEADERBOARD',
+      body: 'The LEADERBOARD shows cumulative P&L for all players.\n\nP&L is calculated at the end of each round:\n· Each trade is settled against the revealed fair value.\n· Failing your contractor obligation deducts $100.\n· Insiders with good information have an edge — use it.',
+    },
+    {
+      title: '// COMMAND SHORTCUTS',
+      body: 'Power users can use the COMMAND input for fast actions:\n\nb10b — place a bid at $10\na15a — place an ask at $15\nh — hit the current bid\nl — lift the current ask\n\nPress Enter or ↵ to submit. Good luck.',
+    },
+  ];
+
+  const handleReadyClick = useCallback(() => {
+    setNewRoundPopup(false);
+    try {
+      const seen = typeof window !== 'undefined' && window.localStorage.getItem('hiloTutorialSeen');
+      if (!seen) setTutorialStep(0);
+    } catch {}
+  }, []);
+
+  const handleTutorialNext = useCallback(() => {
+    setTutorialStep(prev => {
+      if (prev === null) return null;
+      if (prev >= TUTORIAL_STEPS.length - 1) {
+        try { window.localStorage.setItem('hiloTutorialSeen', '1'); } catch {}
+        return null;
+      }
+      return prev + 1;
+    });
+  }, []);
+
+  const handleTutorialSkip = useCallback(() => {
+    try { window.localStorage.setItem('hiloTutorialSeen', '1'); } catch {}
+    setTutorialStep(null);
+  }, []);
+
   // Stepper helpers
   const stepBid = (dir: 1 | -1) => {
     const current = parseInt(bidAmount) || currentBid;
@@ -803,6 +855,34 @@ export default function GamePage() {
         </Modal>
       )}
 
+      {/* ── TUTORIAL MODAL ───────────────────────── */}
+      {tutorialStep !== null && (
+        <Modal transparent visible animationType="fade" onRequestClose={handleTutorialSkip}>
+          <View style={styles.modalOverlay}>
+            <View style={[styles.modalBox, { maxWidth: 420 }]}>
+              <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 4 }}>
+                <Text style={styles.modalLabel}>{TUTORIAL_STEPS[tutorialStep].title}</Text>
+                <Text style={[styles.modalMeta, { color: T.textDim }]}>{tutorialStep + 1}/{TUTORIAL_STEPS.length}</Text>
+              </View>
+              <View style={styles.modalDivider} />
+              <Text style={[styles.modalMeta, { lineHeight: 20, marginTop: 8, marginBottom: 16 }]}>
+                {TUTORIAL_STEPS[tutorialStep].body}
+              </Text>
+              <View style={[styles.modalActions, { marginTop: 0 }]}>
+                <TouchableOpacity style={[styles.modalBtn, { borderColor: T.textDim }]} onPress={handleTutorialSkip}>
+                  <Text style={[styles.modalBtnText, { color: T.textDim }]}>SKIP</Text>
+                </TouchableOpacity>
+                <TouchableOpacity style={[styles.modalBtn, { borderColor: T.green }]} onPress={handleTutorialNext}>
+                  <Text style={[styles.modalBtnText, { color: T.green }]}>
+                    {tutorialStep >= TUTORIAL_STEPS.length - 1 ? 'DONE' : 'NEXT →'}
+                  </Text>
+                </TouchableOpacity>
+              </View>
+            </View>
+          </View>
+        </Modal>
+      )}
+
       {/* ── NEW ROUND MODAL ──────────────────────── */}
       {newRoundPopup && (
         <Modal transparent visible animationType="fade" onRequestClose={() => setNewRoundPopup(false)}>
@@ -825,7 +905,7 @@ export default function GamePage() {
                   ? (playerInfo.diceRoll !== undefined ? `DICE: ${playerInfo.diceRoll}` : `COIN: ${playerInfo.coinFlip?.toUpperCase()}`)
                   : ''}
               </Text>
-              <TouchableOpacity style={[styles.modalBtn, { borderColor: T.green, marginTop: 16 }]} onPress={() => setNewRoundPopup(false)}>
+              <TouchableOpacity style={[styles.modalBtn, { borderColor: T.green, marginTop: 16 }]} onPress={handleReadyClick}>
                 <Text style={[styles.modalBtnText, { color: T.green }]}>READY</Text>
               </TouchableOpacity>
             </View>
