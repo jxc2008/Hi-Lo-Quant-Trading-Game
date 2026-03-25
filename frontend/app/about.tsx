@@ -1,320 +1,372 @@
-import React, { useRef, useState, useEffect } from 'react';
-import { View, Text, ScrollView, Animated, Easing, StyleSheet, Dimensions, Linking, Platform } from 'react-native';
+import React, { useRef, useEffect } from 'react';
+import {
+  View,
+  Text,
+  ScrollView,
+  Animated,
+  StyleSheet,
+  Linking,
+  TouchableOpacity,
+  Dimensions,
+  Platform,
+} from 'react-native';
 import { Link } from 'expo-router';
-import { SocialLink } from './components/SocialLink';
+import { Ionicons } from '@expo/vector-icons';
+import { useFonts } from 'expo-font';
+import { T } from '../styles/global';
 
 const { height: SCREEN_HEIGHT } = Dimensions.get('window');
 
-const FadeInOnScroll: React.FC<{
-  children: React.ReactNode;
-  scrollY: Animated.Value;
-}> = ({ children, scrollY }) => {
+const FadeInOnScroll: React.FC<{ children: React.ReactNode; scrollY: Animated.Value }> = ({ children, scrollY }) => {
   const fadeAnim = useRef(new Animated.Value(0)).current;
-  const viewRef = useRef<View>(null);
   const [viewTop, setViewTop] = React.useState<number | null>(null);
 
   useEffect(() => {
-    const listenerId = scrollY.addListener(({ value }) => {
-      if (viewTop !== null) {
-        const fadeStartThreshold = SCREEN_HEIGHT - 100;
-        if (value + fadeStartThreshold >= viewTop) {
-          Animated.timing(fadeAnim, {
-            toValue: 1,
-            duration: 700,
-            easing: Easing.out(Easing.cubic),
-            useNativeDriver: true,
-          }).start();
-        }
+    const id = scrollY.addListener(({ value }) => {
+      if (viewTop !== null && value + SCREEN_HEIGHT - 80 >= viewTop) {
+        Animated.timing(fadeAnim, { toValue: 1, duration: 600, useNativeDriver: true }).start();
       }
     });
-
-    return () => {
-      scrollY.removeListener(listenerId);
-    };
-  }, [scrollY, fadeAnim, viewTop]);
+    return () => scrollY.removeListener(id);
+  }, [scrollY, viewTop, fadeAnim]);
 
   return (
-    <Animated.View
-      ref={viewRef}
-      style={{ opacity: fadeAnim }}
-      onLayout={e => {
-        const layout = e.nativeEvent.layout;
-        setViewTop(layout.y);
-      }}
-    >
+    <Animated.View style={{ opacity: fadeAnim }} onLayout={e => setViewTop(e.nativeEvent.layout.y)}>
       {children}
     </Animated.View>
   );
 };
 
-const ScrollDownIndicator: React.FC = () => {
-  const bounceAnim = useRef(new Animated.Value(0)).current;
+const TEAM = [
+  {
+    id: 'joseph',
+    tag: '// 01',
+    name: 'JOSEPH CHENG',
+    school: 'New York University',
+    degree: 'CS & Mathematics',
+    bio: 'Hi! I\'m Joe, and I love problem-solving and exploring the fun side of game theory. The Hi-Lo Trading Game was born out of my fascination with quantitative finance, blending the excitement of trading with a game anyone can enjoy. When I\'m not working on projects like this, you\'ll find me exploring NYC with friends, playing basketball, or contemplating my life\'s hidden purpose.',
+    links: [
+      { icon: 'logo-instagram' as const, url: 'https://www.instagram.com/koioseph_/', label: 'INSTAGRAM' },
+      { icon: 'logo-linkedin' as const, url: 'https://www.linkedin.com/in/joseph-cheng-b03886296', label: 'LINKEDIN' },
+      { icon: 'logo-github' as const, url: 'https://github.com/jxc2008', label: 'GITHUB' },
+      { icon: 'mail' as const, url: 'mailto:joseph.x.cheng@gmail.com', label: 'EMAIL' },
+    ],
+  },
+  {
+    id: 'brian',
+    tag: '// 02',
+    name: 'BRIAN LI',
+    school: 'University of Illinois',
+    degree: 'Computer Science',
+    bio: 'I started out with competitive programming but found my joy in creating applications everyone can use. Outside of coding, I love trying different kinds of ice cream, playing sports like volleyball or basketball, and traveling wherever I can. I\'m always looking for new opportunities to learn and grow.',
+    links: [
+      { icon: 'logo-instagram' as const, url: 'https://www.instagram.com/librianli/', label: 'INSTAGRAM' },
+      { icon: 'logo-linkedin' as const, url: 'https://www.linkedin.com/in/librianli/', label: 'LINKEDIN' },
+      { icon: 'logo-github' as const, url: 'https://github.com/ExtraMediumDev', label: 'GITHUB' },
+      { icon: 'mail' as const, url: 'mailto:brian3092li@gmail.com', label: 'EMAIL' },
+    ],
+  },
+];
 
-  useEffect(() => {
-    Animated.loop(
-      Animated.sequence([
-        Animated.timing(bounceAnim, {
-          toValue: 1,
-          duration: 600,
-          useNativeDriver: true,
-        }),
-        Animated.timing(bounceAnim, {
-          toValue: 0,
-          duration: 600,
-          useNativeDriver: true,
-        }),
-      ])
-    ).start();
-  }, [bounceAnim]);
-
-  const translateY = bounceAnim.interpolate({
-    inputRange: [0, 1],
-    outputRange: [0, -10],
-  });
-
-  return (
-    <Animated.View style={{ transform: [{ translateY }] }}>
-      <Text style={styles.scrollArrow}>▼</Text>
-    </Animated.View>
-  );
-};
+const STACK = [
+  { label: 'FRONTEND', value: 'React Native / Expo' },
+  { label: 'BACKEND', value: 'Flask + Python' },
+  { label: 'DATABASE', value: 'MongoDB Atlas' },
+  { label: 'REALTIME', value: 'Socket.IO' },
+  { label: 'HOSTING', value: 'Vercel + Render' },
+];
 
 export default function About() {
-    const scrollY = useRef(new Animated.Value(0)).current;
-    const fadeAnim = useRef(new Animated.Value(0)).current;
+  const scrollY = useRef(new Animated.Value(0)).current;
+  const fadeAnim = useRef(new Animated.Value(0)).current;
 
-    useEffect(() => {
-        Animated.timing(fadeAnim, {
-            toValue: 1,
-            duration: 1000,
-            useNativeDriver: true,
-        }).start();
-    }, [fadeAnim]);
+  const [fontsLoaded] = useFonts({
+    'Orbitron': require('../assets/fonts/Orbitron-Bold.ttf'),
+  });
 
-    const handleScroll = (e: any) => {
-        scrollY.setValue(e.nativeEvent.contentOffset.y);
-    };
+  useEffect(() => {
+    Animated.timing(fadeAnim, { toValue: 1, duration: 800, useNativeDriver: true }).start();
+  }, []);
 
-    const handleSocialLinkPress = (url: string) => {
-        Linking.openURL(url);
-    };
+  if (!fontsLoaded) return null;
 
-    return (
-        <View style={styles.container}>
-            <Animated.View style={[styles.content, { opacity: fadeAnim }]}>
-                <ScrollView
-                    contentContainerStyle={styles.scrollContentContainer}
-                    onScroll={handleScroll}
-                    scrollEventThrottle={16}
-                >
-                    {/* Hero Section */}
-                    <View style={styles.heroSection}>
-                        <View style={styles.letterContainer}>
-                            <Text style={styles.letterHeader}>About Us</Text>
-                            <Text style={styles.letterSubHeader}>The Developers of Hi Lo Stock Market Game</Text>
-                            <View style={styles.letterDecoration} />
-                            <Text style={styles.description}>
-                                We were inspired to design this game based on the trading games we played in our quant clubs at our respective schools. This game is a full-stack real-time multiplayer project built on React Native, Flask, MongoDB, and SocketIO.
-                            </Text>
-                        </View>
-                        <ScrollDownIndicator />
-                    </View>
+  return (
+    <View style={styles.container}>
+      <Animated.View style={[{ flex: 1 }, { opacity: fadeAnim }]}>
 
-                    <View style={styles.contentContainer}>
-                        {/* Team Members Section */}
-                        <FadeInOnScroll scrollY={scrollY}>
-                            <View style={styles.teamContainer}>
-                                {/* Joseph Cheng Section */}
-                                <View style={styles.memberContainer}>
-                                    <Text style={styles.sectionTitle}>Joseph Cheng</Text>
-                                    <Text style={styles.description}>
-                                        Computer Science and Math student at 
-                                        <Text style={{ fontWeight: 'bold', color: '#fff' }}> New York University</Text>
-                                    </Text>
-                                    {Platform.OS === 'web' && (
-                                        <Text style={styles.bio}>
-                                            Hi! I'm Joe, and I love problem-solving and exploring the fun side of game theory. The Hi-Lo Trading Game was born out of my fascination with quantitative finance, blending the excitement of trading with a game anyone can enjoy. I'm always curious about how math and technology can create real-world solutions, and I'm especially passionate about bringing creative ideas to life. When I'm not working on projects like this, you'll probably find me exploring NYC with friends, playing basketball, or contemplating my life's hidden purpose.
-                                        </Text>
-                                    )}
-                                    <View style={styles.socialLinks}>
-                                        <SocialLink icon="logo-instagram" url="https://www.instagram.com/koioseph_/" onPress={handleSocialLinkPress} size={Platform.OS === 'web' ? 28 : 15}/>
-                                        <SocialLink icon="logo-linkedin" url="https://www.linkedin.com/in/joseph-cheng-b03886296" onPress={handleSocialLinkPress} size={Platform.OS === 'web' ? 28 : 15}/>
-                                        <SocialLink icon="logo-github" url="https://github.com/jxc2008" onPress={handleSocialLinkPress} size={Platform.OS === 'web' ? 28 : 15}/>
-                                        <SocialLink icon="mail" url="mailto:joseph.x.cheng@gmail.com" onPress={handleSocialLinkPress} size={Platform.OS === 'web' ? 28 : 15}/>
-                                    </View>
-                                </View>
-
-                                {/* Brian Li Section */}
-                                <View style={styles.memberContainer}>
-                                    <Text style={styles.sectionTitle}>Brian Li</Text>
-                                    <Text style={styles.description}>
-                                        Computer Science student at the
-                                        <Text style={{ fontWeight: 'bold', color: '#fff' }}> University of Illinois</Text>
-                                    </Text>
-                                    {Platform.OS === 'web' && (
-                                        <Text style={styles.bio}>
-                                            I started out with competitive programming but I found my joy in creating applications everyone can use. Outside of coding, I love trying different kinds of ice cream, playing sports like volleyball or basketball, and traveling wherever I can. I'm always looking for new opportunities to learn and grow, and I'm excited to see where my journey takes me next.
-                                        </Text>
-                                    )}
-                                    <View style={styles.socialLinks}>
-                                        <SocialLink icon="logo-instagram" url="https://www.instagram.com/librianli/" onPress={handleSocialLinkPress} size={Platform.OS === 'web' ? 28 : 15}/>
-                                        <SocialLink icon="logo-linkedin" url="https://www.linkedin.com/in/librianli/" onPress={handleSocialLinkPress} size={Platform.OS === 'web' ? 28 : 15}/>
-                                        <SocialLink icon="logo-github" url="https://github.com/ExtraMediumDev" onPress={handleSocialLinkPress} size={Platform.OS === 'web' ? 28 : 15}/>
-                                        <SocialLink icon="mail" url="mailto:brian3092li@gmail.com" onPress={handleSocialLinkPress} size={Platform.OS === 'web' ? 28 : 15}/>
-                                    </View>
-                                </View>
-                            </View>
-                        </FadeInOnScroll>
-
-                        {/* Back to Home Link */}
-                        <FadeInOnScroll scrollY={scrollY}>
-                            <Link href="/" style={styles.linkButton}>
-                                <Text style={styles.linkText}>Back to Home</Text>
-                            </Link>
-                        </FadeInOnScroll>
-                    </View>
-                </ScrollView>
-            </Animated.View>
+        {/* Top bar */}
+        <View style={styles.topBar}>
+          <Text style={styles.topBarBrand}>HI-LO TRADING TERMINAL</Text>
+          <Text style={styles.topBarSection}>// ABOUT</Text>
         </View>
-    );
+
+        <ScrollView
+          contentContainerStyle={styles.scrollContent}
+          onScroll={e => scrollY.setValue(e.nativeEvent.contentOffset.y)}
+          scrollEventThrottle={16}
+        >
+          <View style={styles.inner}>
+
+            {/* Page header */}
+            <View style={styles.pageHeader}>
+              <Text style={styles.pageTitle}>THE TEAM</Text>
+              <Text style={styles.pageSubtitle}>HI-LO, LLC — QUANTITATIVE TRADING DIVISION</Text>
+              <View style={styles.titleAccent} />
+              <Text style={styles.pageDesc}>
+                Built by two students who wanted to bring the trading floor experience online.
+                Inspired by quant club games at NYU and UIUC.
+              </Text>
+            </View>
+
+            {/* Tech stack strip */}
+            <FadeInOnScroll scrollY={scrollY}>
+              <View style={styles.stackSection}>
+                <Text style={styles.stackLabel}>// TECH STACK</Text>
+                <View style={styles.stackRow}>
+                  {STACK.map((s, i) => (
+                    <View key={s.label} style={[styles.stackItem, i < STACK.length - 1 && styles.stackItemBorder]}>
+                      <Text style={styles.stackValue}>{s.value}</Text>
+                      <Text style={styles.stackKey}>{s.label}</Text>
+                    </View>
+                  ))}
+                </View>
+              </View>
+            </FadeInOnScroll>
+
+            {/* Team members */}
+            {TEAM.map(member => (
+              <FadeInOnScroll key={member.id} scrollY={scrollY}>
+                <View style={styles.memberSection}>
+                  <View style={styles.memberHeader}>
+                    <Text style={styles.memberTag}>{member.tag}</Text>
+                    <View style={styles.memberTitleBlock}>
+                      <Text style={styles.memberName}>{member.name}</Text>
+                      <Text style={styles.memberMeta}>{member.degree}  ·  {member.school}</Text>
+                    </View>
+                  </View>
+
+                  {Platform.OS === 'web' && (
+                    <Text style={styles.memberBio}>{member.bio}</Text>
+                  )}
+
+                  <View style={styles.linksRow}>
+                    {member.links.map(link => (
+                      <TouchableOpacity
+                        key={link.label}
+                        style={styles.linkBtn}
+                        onPress={() => Linking.openURL(link.url)}
+                      >
+                        <Ionicons name={link.icon} size={14} color={T.textDim} />
+                        <Text style={styles.linkBtnText}>{link.label}</Text>
+                      </TouchableOpacity>
+                    ))}
+                  </View>
+                </View>
+              </FadeInOnScroll>
+            ))}
+
+            {/* Footer */}
+            <FadeInOnScroll scrollY={scrollY}>
+              <View style={styles.footer}>
+                <Link href="/" style={styles.backLink}>
+                  <Text style={styles.backLinkText}>← BACK TO TERMINAL</Text>
+                </Link>
+              </View>
+            </FadeInOnScroll>
+
+          </View>
+        </ScrollView>
+      </Animated.View>
+    </View>
+  );
 }
 
 const styles = StyleSheet.create({
-    container: {
-        flex: 1,
-        backgroundColor: '#000000',
-    },
-    content: {
-        flex: 1,
-    },
-    scrollContentContainer: {
-        paddingBottom: 80,
-    },
-    contentContainer: {
-        alignSelf: 'center',
-        width: '100%',
-        maxWidth: 1200,
-        paddingHorizontal: 10,
-    },
-    heroSection: {
-        padding: 40,
-        backgroundColor: '#0f0f0f',
-        alignItems: 'center',
-    },
-    letterContainer: {
-        backgroundColor: '#1c1c1c',
-        padding: 30,
-        borderRadius: 10,
-        shadowColor: '#000',
-        shadowOffset: { width: 0, height: 10 },
-        shadowOpacity: 0.3,
-        shadowRadius: 15,
-        width: '100%',
-        maxWidth: 600,
-        borderWidth: 1,
-        borderColor: '#333',
-    },
-    letterHeader: {
-        fontSize: 28,
-        fontWeight: 'bold',
-        textAlign: 'center',
-        marginBottom: 5,
-        color: '#f0f0f0',
-        textTransform: 'uppercase',
-        letterSpacing: 2,
-    },
-    letterSubHeader: {
-        fontSize: 18,
-        textAlign: 'center',
-        marginBottom: 20,
-        color: '#bbb',
-        fontStyle: 'italic',
-    },
-    letterDecoration: {
-        height: 2,
-        width: '20%',
-        backgroundColor: '#ffffff',
-        marginVertical: 20,
-        alignSelf: 'center',
-    },
-    description: {
-        fontSize: Platform.OS === 'web' ? 18 : 12,
-        fontStyle: 'italic',
-        lineHeight: Platform.OS === 'web' ? 26 : 22,
-        color: '#ddd',
-        marginBottom: 16,
-    },
-    descriptionMobile: {
-        fontSize: 16,
-        lineHeight: 22,
-    },
-    bio: {
-        fontSize: Platform.OS === 'web' ? 18 : 10,
-        lineHeight: Platform.OS === 'web' ? 26 : 22,
-        color: '#bbb',
-        marginBottom: 16,
-    },
-    bioMobile: {
-        fontSize: 16,
-        lineHeight: 22,
-    },
-    socialLinks: {
-        flexDirection: 'row',
-        justifyContent: 'center', // Center the links
-        alignItems: 'center', // Vertically align items
-        marginTop: 'auto', // Push the links to the bottom
-        paddingTop: 10,
-    },
-    linkButton: {
-        backgroundColor: '#3b82f6',
-        paddingVertical: 16,
-        paddingHorizontal: 32,
-        borderRadius: 12,
-        alignSelf: 'center',
-        marginTop: 40,
-        marginBottom: 20,
-        shadowColor: '#3b82f6',
-        shadowOffset: { width: 0, height: 4 },
-        shadowOpacity: 0.2,
-        shadowRadius: 8,
-        elevation: 5,
-    },
-    linkText: {
-        color: '#ffffff',
-        fontSize: 16,
-        fontWeight: 'bold',
-        textAlign: 'center',
-    },
-    scrollArrow: {
-        fontSize: 32,
-        color: '#3b82f6',
-        textAlign: 'center',
-        marginTop: 40,
-    },
-    teamContainer: {
-        flexDirection: 'row',
-        justifyContent: 'space-between',
-        marginTop: 40,
-    },
-    memberContainer: {
-        flex: 1,
-        backgroundColor: '#1c1c1c',
-        borderRadius: 10,
-        padding: 25,
-        marginHorizontal: 10,
-        marginBottom: 30,
-        shadowColor: '#000',
-        shadowOffset: { width: 0, height: 10 },
-        shadowOpacity: 0.3,
-        shadowRadius: 15,
-    },
-    sectionTitle: {
-        fontSize: Platform.OS === 'web' ? 28 : 20,
-        fontWeight: 'bold',
-        color: '#f0f0f0',
-        marginBottom: 16,
-        textTransform: 'uppercase',
-        letterSpacing: 2,
-    },
-});
+  container: {
+    flex: 1,
+    backgroundColor: T.bg,
+  },
+  topBar: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    paddingHorizontal: 20,
+    paddingVertical: 12,
+    borderBottomWidth: 1,
+    borderColor: T.border,
+  },
+  topBarBrand: {
+    fontFamily: 'Orbitron',
+    fontSize: 10,
+    color: T.textDim,
+    letterSpacing: 2,
+  },
+  topBarSection: {
+    fontFamily: 'Orbitron',
+    fontSize: 10,
+    color: T.cyan,
+    letterSpacing: 2,
+  },
+  scrollContent: {
+    paddingBottom: 80,
+  },
+  inner: {
+    maxWidth: 720,
+    width: '100%',
+    alignSelf: 'center',
+    paddingHorizontal: 20,
+  },
 
+  // Page header
+  pageHeader: {
+    paddingVertical: 48,
+    borderBottomWidth: 1,
+    borderColor: T.border,
+    marginBottom: 8,
+  },
+  pageTitle: {
+    fontFamily: 'Orbitron',
+    fontSize: 32,
+    color: T.textPri,
+    letterSpacing: 6,
+    marginBottom: 6,
+  },
+  pageSubtitle: {
+    fontFamily: 'Orbitron',
+    fontSize: 10,
+    color: T.textDim,
+    letterSpacing: 3,
+    marginBottom: 16,
+  },
+  titleAccent: {
+    width: 40,
+    height: 2,
+    backgroundColor: T.cyan,
+    marginBottom: 20,
+  },
+  pageDesc: {
+    fontFamily: T.mono,
+    fontSize: 14,
+    color: T.textSec,
+    lineHeight: 22,
+    maxWidth: 560,
+  },
+
+  // Tech stack
+  stackSection: {
+    borderBottomWidth: 1,
+    borderColor: T.border,
+    paddingVertical: 28,
+  },
+  stackLabel: {
+    fontFamily: T.mono,
+    fontSize: 10,
+    color: T.textDim,
+    letterSpacing: 2,
+    marginBottom: 16,
+  },
+  stackRow: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+  },
+  stackItem: {
+    paddingVertical: 12,
+    paddingHorizontal: 20,
+    alignItems: 'center',
+  },
+  stackItemBorder: {
+    borderRightWidth: 1,
+    borderColor: T.border,
+  },
+  stackValue: {
+    fontFamily: T.mono,
+    fontSize: 13,
+    color: T.textPri,
+    marginBottom: 4,
+  },
+  stackKey: {
+    fontFamily: T.mono,
+    fontSize: 9,
+    color: T.textDim,
+    letterSpacing: 2,
+  },
+
+  // Member
+  memberSection: {
+    borderBottomWidth: 1,
+    borderColor: T.border,
+    paddingVertical: 36,
+  },
+  memberHeader: {
+    flexDirection: 'row',
+    alignItems: 'flex-start',
+    gap: 16,
+    marginBottom: 20,
+  },
+  memberTag: {
+    fontFamily: T.mono,
+    fontSize: 11,
+    color: T.textDim,
+    letterSpacing: 1,
+    marginTop: 4,
+  },
+  memberTitleBlock: {
+    flex: 1,
+  },
+  memberName: {
+    fontFamily: 'Orbitron',
+    fontSize: 20,
+    color: T.textPri,
+    letterSpacing: 3,
+    marginBottom: 6,
+  },
+  memberMeta: {
+    fontFamily: T.mono,
+    fontSize: 12,
+    color: T.cyan,
+    letterSpacing: 1,
+  },
+  memberBio: {
+    fontFamily: T.mono,
+    fontSize: 13,
+    color: T.textSec,
+    lineHeight: 22,
+    marginBottom: 24,
+  },
+  linksRow: {
+    flexDirection: 'row',
+    gap: 8,
+    flexWrap: 'wrap',
+  },
+  linkBtn: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+    borderWidth: 1,
+    borderColor: T.border,
+    paddingVertical: 6,
+    paddingHorizontal: 12,
+    backgroundColor: T.surface,
+  },
+  linkBtnText: {
+    fontFamily: T.mono,
+    fontSize: 11,
+    color: T.textDim,
+    letterSpacing: 1,
+  },
+
+  // Footer
+  footer: {
+    paddingVertical: 40,
+    alignItems: 'center',
+  },
+  backLink: {
+    paddingVertical: 10,
+  },
+  backLinkText: {
+    fontFamily: T.mono,
+    fontSize: 12,
+    color: T.textDim,
+    letterSpacing: 2,
+  },
+});

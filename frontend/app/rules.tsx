@@ -1,288 +1,235 @@
-import React, { useRef, useState, useEffect } from 'react';
+import React, { useRef, useState, useEffect, useCallback } from 'react';
 import {
   View,
   Text,
   ScrollView,
   Animated,
-  Easing,
   StyleSheet,
+  TouchableOpacity,
   Dimensions,
-  NativeScrollEvent,
-  NativeSyntheticEvent,
-  Platform,
 } from 'react-native';
 import { Link } from 'expo-router';
+import { useFonts } from 'expo-font';
+import { T } from '../styles/global';
+import TutorialModal, { TUTORIAL_STEPS } from './components/TutorialModal';
 
 const { height: SCREEN_HEIGHT } = Dimensions.get('window');
 
-// FadeInOnScroll component remains the same
-const FadeInOnScroll: React.FC<{
-  children: React.ReactNode;
-  scrollY: Animated.Value;
-}> = ({ children, scrollY }) => {
+const FadeInOnScroll: React.FC<{ children: React.ReactNode; scrollY: Animated.Value }> = ({ children, scrollY }) => {
   const fadeAnim = useRef(new Animated.Value(0)).current;
-  const viewRef = useRef<View>(null);
-  const [viewTop, setViewTop] = React.useState<number | null>(null);
+  const [viewTop, setViewTop] = useState<number | null>(null);
 
   useEffect(() => {
-    const listenerId = scrollY.addListener(({ value }) => {
-      if (viewTop !== null) {
-        const fadeStartThreshold = SCREEN_HEIGHT - 100;
-        if (value + fadeStartThreshold >= viewTop) {
-          Animated.timing(fadeAnim, {
-            toValue: 1,
-            duration: 700,
-            easing: Easing.out(Easing.cubic),
-            useNativeDriver: true,
-          }).start();
-        }
+    const id = scrollY.addListener(({ value }) => {
+      if (viewTop !== null && value + SCREEN_HEIGHT - 80 >= viewTop) {
+        Animated.timing(fadeAnim, { toValue: 1, duration: 600, useNativeDriver: true }).start();
       }
     });
-
-    return () => {
-      scrollY.removeListener(listenerId);
-    };
-  }, [scrollY, fadeAnim, viewTop]);
+    return () => scrollY.removeListener(id);
+  }, [scrollY, viewTop, fadeAnim]);
 
   return (
-    <Animated.View
-      ref={viewRef}
-      style={{ opacity: fadeAnim }}
-      onLayout={e => {
-        const layout = e.nativeEvent.layout;
-        setViewTop(layout.y);
-      }}
-    >
+    <Animated.View style={{ opacity: fadeAnim }} onLayout={e => setViewTop(e.nativeEvent.layout.y)}>
       {children}
     </Animated.View>
   );
 };
 
-// ScrollDownIndicator component remains the same
-const ScrollDownIndicator: React.FC = () => {
-  const bounceAnim = useRef(new Animated.Value(0)).current;
+const SECTIONS = [
+  {
+    tag: '// 01',
+    label: 'OVERVIEW',
+    body: 'Every round, a hidden stock price is generated from dice rolls and a coin flip. Players trade the stock using bids and asks. When the round ends, the true price is revealed and P&L is settled.',
+    stats: [
+      { label: 'PLAYERS', value: '4 – 10' },
+      { label: 'ROUND TIME', value: '5 MIN' },
+      { label: 'PRICE RANGE', value: '$1 – $20' },
+    ],
+  },
+  {
+    tag: '// 02',
+    label: 'PRICE GENERATION',
+    body: 'The fair value is determined by two mechanisms operating in secret.',
+    bullets: [
+      { key: 'DICE', desc: '2 twenty-sided dice are rolled (3 dice for 8+ players). Each roll is a candidate price.' },
+      { key: 'COIN FLIP', desc: 'HEADS → fair value = highest roll. TAILS → fair value = lowest roll.' },
+      { key: 'SECRECY', desc: 'No single player sees the full picture. Information is distributed.' },
+    ],
+  },
+  {
+    tag: '// 03',
+    label: 'PLAYER ROLES',
+    body: 'Each round, every player is assigned one of four roles.',
+    bullets: [
+      { key: 'DICE HOLDER', desc: 'Knows one dice value. Two players receive this role (one per die).' },
+      { key: 'COIN HOLDER', desc: 'Knows the coin flip result: HIGH or LOW. One player receives this role.' },
+      { key: 'CONTRACTOR', desc: 'Assigned a trade obligation (e.g. LONG @ 3 = buy 3+ times). Failing costs $100.' },
+      { key: 'MARKET MAKER', desc: 'No private info. Must read the market and infer fair value from price action.' },
+    ],
+  },
+  {
+    tag: '// 04',
+    label: 'TRADING MECHANICS',
+    body: 'The market runs on a continuous double auction.',
+    bullets: [
+      { key: 'BID', desc: 'The highest price a buyer will pay. New bids must strictly exceed the current bid.' },
+      { key: 'ASK', desc: 'The lowest price a seller will accept. New asks must undercut the current ask.' },
+      { key: 'LIFT ASK', desc: 'Buy immediately at the standing ask price. Clears the ask.' },
+      { key: 'HIT BID', desc: 'Sell immediately at the standing bid price. Clears the bid.' },
+    ],
+  },
+  {
+    tag: '// 05',
+    label: 'PROFIT & LOSS',
+    body: 'At round end, the fair value is revealed and all trades are settled.',
+    bullets: [
+      { key: 'LONG', desc: 'Each unit bought is worth (fair value − purchase price).' },
+      { key: 'SHORT', desc: 'Each unit sold is worth (sale price − fair value).' },
+      { key: 'PENALTY', desc: 'Failing to meet a contract obligation deducts $100 from round P&L.' },
+      { key: 'LEADERBOARD', desc: 'P&L accumulates across rounds. Highest total at game end wins.' },
+    ],
+    example: ['Fair value = $15', 'Bought at $12  →  +$3', 'Sold at $18  →  +$3', 'Contract missed  →  −$100'],
+  },
+  {
+    tag: '// 06',
+    label: 'WINNING',
+    body: 'Profits and losses accumulate across all rounds. The player with the highest cumulative P&L when the game ends wins. Use your private information wisely, manage your contract obligations, and read the market.',
+    bullets: [
+      { key: 'EDGE', desc: 'Private info is your advantage. Use it without revealing what you know.' },
+      { key: 'DEDUCTION', desc: 'Watch others\' bids and asks — they reveal information about their role.' },
+      { key: 'DISCIPLINE', desc: 'Always fulfill your contract. A $100 penalty wipes out multiple good trades.' },
+    ],
+  },
+];
 
-  useEffect(() => {
-    Animated.loop(
-      Animated.sequence([
-        Animated.timing(bounceAnim, {
-          toValue: 1,
-          duration: 600,
-          useNativeDriver: true,
-        }),
-        Animated.timing(bounceAnim, {
-          toValue: 0,
-          duration: 600,
-          useNativeDriver: true,
-        }),
-      ])
-    ).start();
-  }, [bounceAnim]);
-
-  const translateY = bounceAnim.interpolate({
-    inputRange: [0, 1],
-    outputRange: [0, -10],
-  });
-
-  return (
-    <Animated.View style={{ transform: [{ translateY }] }}>
-      <Text style={styles.scrollArrow}>▼</Text>
-    </Animated.View>
-  );
-};
-
-export default function DramaticRules() {
+export default function Rules() {
   const scrollY = useRef(new Animated.Value(0)).current;
   const fadeAnim = useRef(new Animated.Value(0)).current;
+  const [tutorialStep, setTutorialStep] = useState<number | null>(null);
+
+  const [fontsLoaded] = useFonts({
+    'Orbitron': require('../assets/fonts/Orbitron-Bold.ttf'),
+  });
 
   useEffect(() => {
-    Animated.timing(fadeAnim, {
-      toValue: 1,
-      duration: 1000,
-      useNativeDriver: true,
-    }).start();
-  }, [fadeAnim]);
+    Animated.timing(fadeAnim, { toValue: 1, duration: 800, useNativeDriver: true }).start();
+  }, []);
 
-  const handleScroll = (e: NativeSyntheticEvent<NativeScrollEvent>) => {
-    scrollY.setValue(e.nativeEvent.contentOffset.y);
-  };
+  const handleTutorialNext = useCallback(() => {
+    setTutorialStep(prev => {
+      if (prev === null) return null;
+      if (prev >= TUTORIAL_STEPS.length - 1) {
+        try { window.localStorage.setItem('hiloTutorialSeen', '1'); } catch {}
+        return null;
+      }
+      return prev + 1;
+    });
+  }, []);
+
+  const handleTutorialSkip = useCallback(() => {
+    try { window.localStorage.setItem('hiloTutorialSeen', '1'); } catch {}
+    setTutorialStep(null);
+  }, []);
+
+  const launchTutorial = useCallback(() => setTutorialStep(0), []);
+
+  if (!fontsLoaded) return null;
 
   return (
     <View style={styles.container}>
-      <Animated.View style={[styles.content, { opacity: fadeAnim }]}>
+      <Animated.View style={[{ flex: 1 }, { opacity: fadeAnim }]}>
+
+        {/* Top bar */}
+        <View style={styles.topBar}>
+          <Text style={styles.topBarBrand}>HI-LO TRADING TERMINAL</Text>
+          <Text style={styles.topBarSection}>// RULES</Text>
+        </View>
+
         <ScrollView
-          contentContainerStyle={styles.scrollContentContainer}
-          onScroll={handleScroll}
+          contentContainerStyle={styles.scrollContent}
+          onScroll={e => scrollY.setValue(e.nativeEvent.contentOffset.y)}
           scrollEventThrottle={16}
         >
-          {/* Hero Section */}
-          <View style={styles.heroSection}>
-            <View style={styles.letterContainer}>
-              <Text style={styles.letterHeader}>Hi-Lo, LLC</Text>
-              <Text style={styles.letterSubHeader}>Quantitative Trading Division</Text>
-              <View style={styles.letterDecoration} />
-              <Text style={styles.date}>{new Date().toLocaleDateString()}</Text>
-              <Text style={styles.greeting}>Dear Candidate,</Text>
-              <Text style={styles.letterBody}>
-                {Platform.OS === 'web'
-                  ? 'Congratulations! After successfully navigating an especially rigorous recruiting process, we are delighted to extend you a formal offer to join Hi-Lo, LLC as a Quantitative Trader. As one of the most innovative and enigmatic quantitative trading firms of the modern era, we invite you to step into our world and begin an extraordinary journey.'
-                  : 'Congratulations! After successfully navigating an especially rigorous recruiting process, we are delighted to extend you a formal offer to join Hi-Lo, LLC as a Quantitative Trader.'}
+          <View style={styles.inner}>
+
+            {/* Page header */}
+            <View style={styles.pageHeader}>
+              <Text style={styles.pageTitle}>GAME RULES</Text>
+              <Text style={styles.pageSubtitle}>QUANTITATIVE TRADING SIMULATION</Text>
+              <View style={styles.titleAccent} />
+              <Text style={styles.pageDesc}>
+                A real-time multiplayer market game where information asymmetry drives profit.
+                Each player holds one piece of a puzzle — use it.
               </Text>
-              {Platform.OS === 'web' && (
-                <Text style={styles.letterBody}>
-                  At Hi-Lo, our company culture thrives on competition. As such, your role will involve competing against your fellow coworkers to generate the highest profits within our proprietary stock market simulation. Your journey begins immediately, and your first task is to master the rules of our dynamic trading game.
-                </Text>
-              )}
-              {Platform.OS === 'web' && (
-                <Text style={styles.letterBody}>
-                  Remember, discretion is paramount—guard your trading strategies closely, as the path to success lies in secrecy and strategy.
-                </Text>
-              )}
-              <Text style={styles.letterBody}>
-                {Platform.OS === 'web'
-                  ? 'Please find the game rules outlined below. Should you have any questions, our team is here to support you. Until then, may the markets ever move in your favor.'
-                  : 'Please be advised that your salary will depend on your performance. You will compete against your fellow coworkers to make the most profit. Find the game rules outlined below. '}
-              </Text>
-              <View style={styles.letterDecoration} />
-              <Text style={styles.closing}>Sincerely,</Text>
-              <Text style={styles.signature}>The Hi-Lo Recruitment Team</Text>
             </View>
-            <ScrollDownIndicator />
-          </View>
 
-          <View style={styles.contentContainer}>
-            {/* Overview */}
-            <FadeInOnScroll scrollY={scrollY}>
-              <View style={styles.sectionContainer}>
-                <View style={styles.sectionIcon}>
-                  <Text style={styles.iconText}>📌</Text>
-                </View>
-                <Text style={styles.sectionTitle}>Overview</Text>
-                <Text style={styles.description}>
-                  Every 5 minutes, we will increase or deduct your earnings based on how well you traded our stock on the market.
-                </Text>
-                <Text style={styles.description}>
-                  We can manipulate the market such that we can control our own share price with seemingly impossible, proprietary algorithms. Regardless, this is a general overview of how it works:
-                </Text>
-                <Text style={styles.description}>
-                  First, we generate possible stock prices via dice rolls. A coin flip will determine if the actual share price becomes the highest or lowest roll.
-                </Text>
-                <View style={styles.statsContainer}>
-                  <View style={styles.stat}>
-                    <Text style={styles.statLabel}>Players</Text>
-                    <Text style={styles.statValue}>4–10</Text>
+            {/* Sections */}
+            {SECTIONS.map((section, i) => (
+              <FadeInOnScroll key={section.tag} scrollY={scrollY}>
+                <View style={styles.section}>
+                  <View style={styles.sectionHeader}>
+                    <Text style={styles.sectionTag}>{section.tag}</Text>
+                    <Text style={styles.sectionLabel}>{section.label}</Text>
                   </View>
-                  <View style={styles.stat}>
-                    <Text style={styles.statLabel}>Duration</Text>
-                    <Text style={styles.statValue}>5 min</Text>
-                  </View>
+
+                  <Text style={styles.sectionBody}>{section.body}</Text>
+
+                  {section.bullets && (
+                    <View style={styles.bulletList}>
+                      {section.bullets.map(b => (
+                        <View key={b.key} style={styles.bulletRow}>
+                          <Text style={styles.bulletKey}>{b.key}</Text>
+                          <Text style={styles.bulletDesc}>{b.desc}</Text>
+                        </View>
+                      ))}
+                    </View>
+                  )}
+
+                  {section.stats && (
+                    <View style={styles.statsRow}>
+                      {section.stats.map(s => (
+                        <View key={s.label} style={styles.statBox}>
+                          <Text style={styles.statValue}>{s.value}</Text>
+                          <Text style={styles.statLabel}>{s.label}</Text>
+                        </View>
+                      ))}
+                    </View>
+                  )}
+
+                  {section.example && (
+                    <View style={styles.exampleBlock}>
+                      <Text style={styles.exampleLabel}>// EXAMPLE</Text>
+                      {section.example.map((line, li) => (
+                        <Text
+                          key={li}
+                          style={[styles.exampleLine, line.startsWith('Contract') && { color: T.red }]}
+                        >
+                          {line}
+                        </Text>
+                      ))}
+                    </View>
+                  )}
                 </View>
+              </FadeInOnScroll>
+            ))}
+
+            {/* Footer actions */}
+            <FadeInOnScroll scrollY={scrollY}>
+              <View style={styles.footer}>
+                <TouchableOpacity style={styles.tutorialBtn} onPress={launchTutorial}>
+                  <Text style={styles.tutorialBtnText}>▶  LAUNCH GAME TUTORIAL</Text>
+                </TouchableOpacity>
+                <Link href="/" style={styles.backLink}>
+                  <Text style={styles.backLinkText}>← BACK TO TERMINAL</Text>
+                </Link>
               </View>
             </FadeInOnScroll>
 
-            {/* How the Game Works */}
-            <FadeInOnScroll scrollY={scrollY}>
-              <View style={styles.sectionContainer}>
-                <View style={styles.sectionIcon}>
-                  <Text style={styles.iconText}>🎲</Text>
-                </View>
-                <Text style={styles.sectionTitle}>How the Game Works</Text>
-                <Text style={styles.description}>
-                  You will trade our company's stock with an unkown share price determined by dice rolls and a coin flip.
-                </Text>
-                <View style={styles.exampleContainer}>
-                  <Text style={styles.exampleText}>🎯 <Text style={styles.exampleHighlight}>Two 20-sided dice</Text> are rolled (three if 8+ players).</Text>
-                  <Text style={styles.exampleText}>🪙 The coin flip then decides if the share price equals the <Text style={styles.exampleHighlight}>highest roll (Heads)</Text> or <Text style={styles.exampleHighlight}>lowest roll (Tails)</Text>.</Text>
-                </View>
-              </View>
-            </FadeInOnScroll>
-
-            {/* Player Information */}
-            <FadeInOnScroll scrollY={scrollY}>
-              <View style={styles.sectionContainer}>
-                <View style={styles.sectionIcon}>
-                  <Text style={styles.iconText}>🧠</Text>
-                </View>
-                <Text style={styles.sectionTitle}>Insider Information</Text>
-                <Text style={styles.description}>
-                  Three employees receive vital information:
-                </Text>
-                <View style={styles.exampleContainer}>
-                  <Text style={styles.exampleText}>🎲 <Text style={styles.exampleHighlight}>One employee</Text> learns the first die roll.</Text>
-                  <Text style={styles.exampleText}>🎲 <Text style={styles.exampleHighlight}>Another employee</Text> learns the second roll.</Text>
-                  <Text style={styles.exampleText}>🪙 <Text style={styles.exampleHighlight}>The third employee</Text> learns the coin flip result (HI/LO).</Text>
-                  <Text style={styles.exampleText}>📜 Other employees receive <Text style={styles.exampleHighlight}>Trading Contracts</Text> (e.g., [Long, 4] means to buy 4+ shares).</Text>
-                  <Text style={styles.exampleText}>⚠️ Failing to meet contract requirements costs a <Text style={styles.exampleHighlight}>$100 penalty in your salary!</Text></Text>
-                </View>
-              </View>
-            </FadeInOnScroll>
-
-            {/* Trading Mechanics */}
-            <FadeInOnScroll scrollY={scrollY}>
-              <View style={styles.sectionContainer}>
-                <View style={styles.sectionIcon}>
-                  <Text style={styles.iconText}>💼</Text>
-                </View>
-                <Text style={styles.sectionTitle}>Trading Mechanics</Text>
-                <Text style={styles.description}>
-                  Please be advised that learning our company's trading vocabulary is essential to your success as an employee.
-                </Text>
-                <Text style={styles.description}>
-                  The market operates on Bids (highest offered buy price) and Asks (lowest offered sell price).
-                </Text>
-                <View style={styles.exampleContainer}>
-                  <Text style={styles.exampleText}>⬆️ New bids must exceed the <Text style={styles.exampleHighlight}>current bid</Text>.</Text>
-                  <Text style={styles.exampleText}>⬇️ New asks must be below the <Text style={styles.exampleHighlight}>current ask</Text>.</Text>
-                  <Text style={styles.exampleText}>🤝 Trades happen instantly when someone <Text style={styles.exampleHighlight}>"lifts" an ask (buys the offered ask) </Text> or <Text style={styles.exampleHighlight}>"hits" a bid (sells the offered bid)</Text>.</Text>
-                </View>
-              </View>
-            </FadeInOnScroll>
-
-            {/* End of Round */}
-            <FadeInOnScroll scrollY={scrollY}>
-              <View style={styles.sectionContainer}>
-                <View style={styles.sectionIcon}>
-                  <Text style={styles.iconText}>📊</Text>
-                </View>
-                <Text style={styles.sectionTitle}>End of Round</Text>
-                <Text style={styles.description}>
-                  After 5 minutes, trading stops and the real share price is revealed. Your profit/loss is calculated from all your trades.
-                </Text>
-                <View style={styles.exampleContainer}>
-                  <Text style={styles.exampleText}>📈 Example: If the share price is 15, buying 2 shares at $13 (+$4) and selling 1 share at $17 (+$2) gives you <Text style={styles.exampleHighlight}>$6 total profit.</Text>.</Text>
-                  <Text style={styles.exampleText}>⚠️ Contract penalties are applied if required.</Text>
-                </View>
-              </View>
-            </FadeInOnScroll>
-
-            {/* Winning the Game */}
-            <FadeInOnScroll scrollY={scrollY}>
-              <View style={styles.sectionContainer}>
-                <View style={styles.sectionIcon}>
-                  <Text style={styles.iconText}>🏆</Text>
-                </View>
-                <Text style={styles.sectionTitle}>Winning the Game</Text>
-                <Text style={styles.description}>
-                  Profits and losses accumulate across multiple rounds. The player with the highest total profit wins!
-                </Text>
-                <Text style={styles.description}>
-                  Please note that good performance doesn't necessarily mean a promotion in our company, but remember that we value you as an employee.
-                </Text>
-                <View style={styles.exampleContainer}>
-                  <Text style={styles.exampleText}>💡 Success requires <Text style={styles.exampleHighlight}>smart trading</Text>, <Text style={styles.exampleHighlight}>effective use of information</Text>, and <Text style={styles.exampleHighlight}>careful management of mandatory orders</Text>.</Text>
-                </View>
-              </View>
-            </FadeInOnScroll>
-
-            {/* Back to Home Link */}
-            <FadeInOnScroll scrollY={scrollY}>
-              <Link href="/" style={styles.linkButton}>
-                <Text style={styles.linkText}>Back to Home</Text>
-              </Link>
-            </FadeInOnScroll>
           </View>
         </ScrollView>
       </Animated.View>
+
+      <TutorialModal step={tutorialStep} onNext={handleTutorialNext} onSkip={handleTutorialSkip} />
     </View>
   );
 }
@@ -290,189 +237,215 @@ export default function DramaticRules() {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: '#000000',
+    backgroundColor: T.bg,
   },
-  content: {
-    flex: 1,
+  topBar: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    paddingHorizontal: 20,
+    paddingVertical: 12,
+    borderBottomWidth: 1,
+    borderColor: T.border,
   },
-  scrollContentContainer: {
+  topBarBrand: {
+    fontFamily: 'Orbitron',
+    fontSize: 10,
+    color: T.textDim,
+    letterSpacing: 2,
+  },
+  topBarSection: {
+    fontFamily: 'Orbitron',
+    fontSize: 10,
+    color: T.green,
+    letterSpacing: 2,
+  },
+  scrollContent: {
     paddingBottom: 80,
   },
-  contentContainer: {
-    alignSelf: 'center',
+  inner: {
+    maxWidth: 720,
     width: '100%',
-    maxWidth: 800,
+    alignSelf: 'center',
     paddingHorizontal: 20,
   },
-  heroSection: {
-    padding: 40,
-    backgroundColor: '#0f0f0f',
-    alignItems: 'center',
-  },
-  letterContainer: {
-    backgroundColor: '#1c1c1c',
-    padding: 30,
-    borderRadius: 10,
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 10 },
-    shadowOpacity: 0.3,
-    shadowRadius: 15,
-    width: '90%',
-    maxWidth: 600,
-    borderWidth: 1,
-    borderColor: '#333',
-  },
-  letterHeader: {
-    fontSize: 28,
-    fontWeight: 'bold',
-    textAlign: 'center',
-    marginBottom: 5,
-    color: '#f0f0f0',
-    textTransform: 'uppercase',
-    letterSpacing: 2,
-  },
-  letterSubHeader: {
-    fontSize: 18,
-    textAlign: 'center',
-    marginBottom: 20,
-    color: '#bbb',
-    fontStyle: 'italic',
-  },
-  date: {
-    fontSize: 14,
-    textAlign: 'right',
-    marginBottom: 20,
-    color: '#888',
-  },
-  greeting: {
-    fontSize: 20,
-    fontWeight: 'bold',
-    marginBottom: 15,
-    color: '#f0f0f0',
-  },
-  letterBody: {
-    fontSize: 16,
-    marginBottom: 20,
-    lineHeight: 24,
-    color: '#ddd',
-  },
-  closing: {
-    fontSize: 18,
-    fontWeight: 'bold',
-    marginTop: 30,
-    marginBottom: 5,
-    color: '#f0f0f0',
-  },
-  signature: {
-    fontSize: 16,
-    fontStyle: 'italic',
-    color: '#bbb',
-  },
-  scrollArrow: {
-    fontSize: 32,
-    color: '#3b82f6',
-    textAlign: 'center',
-    marginTop: 40,
-  },
-  sectionContainer: {
-    margin: 40,
-    backgroundColor: '#1c1c1c',
-    borderRadius: 10,
-    padding: 30,
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 10 },
-    shadowOpacity: 0.3,
-    shadowRadius: 15,
-  },
-  sectionIcon: {
-    backgroundColor: '#334155',
-    width: 48,
-    height: 48,
-    borderRadius: 24,
-    justifyContent: 'center',
-    alignItems: 'center',
-    marginBottom: 16,
-  },
-  iconText: {
-    fontSize: 24,
-  },
-  sectionTitle: {
-    fontSize: 24,
-    fontWeight: 'bold',
-    color: '#f0f0f0',
-    marginBottom: 16,
-    textTransform: 'uppercase',
-    letterSpacing: 2,
-  },
-  description: {
-    fontSize: 16,
-    lineHeight: 24,
-    color: '#ddd',
-    marginBottom: 16,
-  },
-  statsContainer: {
-    flexDirection: 'row',
-    justifyContent: 'space-around',
-    marginTop: 16,
-    backgroundColor: '#2c2c2c',
-    borderRadius: 8,
-    padding: 16,
-  },
-  stat: {
-    alignItems: 'center',
-  },
-  statLabel: {
-    fontSize: 14,
-    color: '#bbb',
-    marginBottom: 4,
-  },
-  statValue: {
-    fontSize: 20,
-    fontWeight: 'bold',
-    color: '#f0f0f0',
-  },
-  exampleContainer: {
-    marginTop: 16,
-    padding: 16,
-    backgroundColor: '#2c2c2c',
-    borderRadius: 8,
-  },
-  exampleText: {
-    fontSize: 14,
-    lineHeight: 20,
-    color: '#bbb',
+
+  // Page header
+  pageHeader: {
+    paddingVertical: 48,
+    borderBottomWidth: 1,
+    borderColor: T.border,
     marginBottom: 8,
   },
-  exampleHighlight: {
-    fontWeight: 'bold',
-    color: '#f0f0f0',
+  pageTitle: {
+    fontFamily: 'Orbitron',
+    fontSize: 32,
+    color: T.textPri,
+    letterSpacing: 6,
+    marginBottom: 6,
   },
-  linkButton: {
-    backgroundColor: '#3b82f6',
-    paddingVertical: 16,
-    paddingHorizontal: 32,
-    borderRadius: 12,
-    alignSelf: 'center',
-    marginTop: 40,
-    marginBottom: 20,
-    shadowColor: '#3b82f6',
-    shadowOffset: { width: 0, height: 4 },
-    shadowOpacity: 0.2,
-    shadowRadius: 8,
-    elevation: 5,
+  pageSubtitle: {
+    fontFamily: 'Orbitron',
+    fontSize: 11,
+    color: T.textDim,
+    letterSpacing: 3,
+    marginBottom: 16,
   },
-  linkText: {
-    color: '#ffffff',
-    fontSize: 16,
-    fontWeight: 'bold',
-    textAlign: 'center',
-  },
-  letterDecoration: {
+  titleAccent: {
+    width: 40,
     height: 2,
-    width: '20%',
-    backgroundColor: '#ffffff',
-    marginVertical: 20,
-    alignSelf: 'center',
+    backgroundColor: T.green,
+    marginBottom: 20,
+  },
+  pageDesc: {
+    fontFamily: T.mono,
+    fontSize: 14,
+    color: T.textSec,
+    lineHeight: 22,
+    maxWidth: 560,
+  },
+
+  // Sections
+  section: {
+    borderBottomWidth: 1,
+    borderColor: T.border,
+    paddingVertical: 36,
+  },
+  sectionHeader: {
+    flexDirection: 'row',
+    alignItems: 'baseline',
+    gap: 12,
+    marginBottom: 16,
+  },
+  sectionTag: {
+    fontFamily: T.mono,
+    fontSize: 11,
+    color: T.textDim,
+    letterSpacing: 1,
+  },
+  sectionLabel: {
+    fontFamily: 'Orbitron',
+    fontSize: 13,
+    color: T.textPri,
+    letterSpacing: 3,
+  },
+  sectionBody: {
+    fontFamily: T.mono,
+    fontSize: 13,
+    color: T.textSec,
+    lineHeight: 21,
+    marginBottom: 20,
+  },
+
+  // Bullets
+  bulletList: {
+    gap: 2,
+  },
+  bulletRow: {
+    flexDirection: 'row',
+    paddingVertical: 10,
+    borderTopWidth: 1,
+    borderColor: T.border,
+    gap: 16,
+    alignItems: 'flex-start',
+  },
+  bulletKey: {
+    fontFamily: T.mono,
+    fontSize: 11,
+    color: T.amber,
+    letterSpacing: 1,
+    width: 100,
+    flexShrink: 0,
+    marginTop: 1,
+  },
+  bulletDesc: {
+    fontFamily: T.mono,
+    fontSize: 13,
+    color: T.textSec,
+    lineHeight: 20,
+    flex: 1,
+  },
+
+  // Stats
+  statsRow: {
+    flexDirection: 'row',
+    gap: 1,
+    marginTop: 8,
+  },
+  statBox: {
+    flex: 1,
+    backgroundColor: T.surface,
+    borderWidth: 1,
+    borderColor: T.border,
+    padding: 16,
+    alignItems: 'center',
+  },
+  statValue: {
+    fontFamily: 'Orbitron',
+    fontSize: 18,
+    color: T.green,
+    letterSpacing: 2,
+    marginBottom: 4,
+  },
+  statLabel: {
+    fontFamily: T.mono,
+    fontSize: 10,
+    color: T.textDim,
+    letterSpacing: 2,
+  },
+
+  // Example block
+  exampleBlock: {
+    backgroundColor: T.surface,
+    borderWidth: 1,
+    borderColor: T.border,
+    borderLeftWidth: 2,
+    borderLeftColor: T.amber,
+    padding: 16,
+    marginTop: 16,
+    gap: 6,
+  },
+  exampleLabel: {
+    fontFamily: T.mono,
+    fontSize: 10,
+    color: T.textDim,
+    letterSpacing: 2,
+    marginBottom: 8,
+  },
+  exampleLine: {
+    fontFamily: T.mono,
+    fontSize: 13,
+    color: T.textSec,
+    lineHeight: 20,
+  },
+
+  // Footer
+  footer: {
+    paddingVertical: 40,
+    alignItems: 'center',
+    gap: 16,
+  },
+  tutorialBtn: {
+    borderWidth: 1,
+    borderColor: T.green,
+    paddingVertical: 14,
+    paddingHorizontal: 32,
+    backgroundColor: 'rgba(0,255,136,0.05)',
+  },
+  tutorialBtnText: {
+    fontFamily: T.mono,
+    fontSize: 13,
+    color: T.green,
+    letterSpacing: 2,
+    fontWeight: 'bold',
+  },
+  backLink: {
+    paddingVertical: 10,
+  },
+  backLinkText: {
+    fontFamily: T.mono,
+    fontSize: 12,
+    color: T.textDim,
+    letterSpacing: 2,
   },
 });
-
