@@ -114,7 +114,6 @@ export default function About() {
               <View style={styles.titleAccent} />
               <Text style={styles.pageDesc}>
                 Built by two students who wanted to bring the trading floor experience online.
-                Inspired by quant club games at NYU and UIUC.
               </Text>
             </View>
 
